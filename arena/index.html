@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 제목 ISSEN: 2026-11-07 사용자 결정. 바꿀 곳: 이 줄, itch/page.md, tools/build.py 의 ZIP_NAME -->
+<title>ISSEN</title>
+<style>
+  /* 먹/종이 톤. 그림이 뜨기 전에도 화면이 비어 보이지 않게 배경을 먼저 깐다 */
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1c1916; }
+  body { display: flex; align-items: center; justify-content: center; }
+  /* 960x540 속성은 그대로 두고, 화면(iframe)에 맞춰 16:9를 지키며 늘이고 줄인다 */
+  canvas {
+    display: block;
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    background: #f6ebd6; /* ground.png 평균색. 그림이 늦게 떠도 종이처럼 보이게 */
+    cursor: none; touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+</style>
+</head>
+<body oncontextmenu="return false">
+<canvas id="c" width="960" height="540"></canvas>
+<script src="img/meta.js"></script>
+<script src="game.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

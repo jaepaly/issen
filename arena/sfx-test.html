@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>효과음 비교</title>
+<style>body{font:16px sans-serif;background:#efe7d6;color:#1d1a17;padding:24px}button{font-size:16px;margin:6px;padding:10px 14px}</style></head>
+<body>
+<h3>일섬 효과음 비교 (클릭해서 듣기)</h3>
+<div id="b"></div>
+<script>
+const ac = new (window.AudioContext || window.webkitAudioContext)(), B = {};
+const items = [
+  ["현재안: 슉+촥(연속 5번)", "combo"],
+  ["슉 (일섬 시작)", "swish"], ["촥 A (벨 때)", "cut_a"], ["촥 B (벨 때)", "cut_b"], ["턱 (엘리트 깎기)", "chop_short"],
+  ["원본 knifeSlice (_unused)", "_unused/knifeSlice"], ["원본 knifeSlice2 (_unused)", "_unused/knifeSlice2"],
+  "2026-11-07 새 소리 (Impact Sounds를 겹치고 피치를 바꿔 만든 것)",
+  ["레벨업 levelup", "levelup"], ["기수 처치 banner", "banner"], ["5꿰기 이상 multi", "multi"], ["엘리트 처치 elite_down", "elite_down"],
+  ["대장군 경고 boss_warn", "boss_warn"], ["대장군 처치 boss_down", "boss_down"], ["빨간 유닛 베임 red_death", "red_death"], ["피격 hurt", "hurt"],
+  ["시간 종료 징 gong_end", "gong_end"], ["일제 베기 allcut", "allcut"], ["예약 취소 tick", "tick"],
+  "상황 재현 (게임과 같은 음량)",
+  ["5꿰기: 촥 5번 + multi", "s_multi"], ["촥 + 레벨업", "s_level"], ["시간 종료: 징 → 0.4초 뒤 일제 베기", "s_end"], ["빨간 유닛 베고 끝남", "s_red"],
+  "2026-11-07 반사 일섬·능력 도장·보스 발도",
+  ["벽 반사 ricochet", "ricochet"], ["능력 도장 perk", "perk"], ["발도 직전 boss_iai_hold", "boss_iai_hold"], ["보스 발도 boss_iai", "boss_iai"],
+  ["LV6 반사 2번 일섬: 슉→팅→팅→촥", "s_bounce"], ["보스 발도: 칼집 → 0.35초 뒤 일제 베기", "s_boss"], ["레벨업 vs 능력 도장", "s_perk"],
+];
+const load = (n) => B[n] ? Promise.resolve(B[n]) : fetch("sfx/" + n + ".mp3").then(r => r.arrayBuffer()).then(b => ac.decodeAudioData(b)).then(x => B[n] = x);
+function play(n, g = 0.7, rate = 1, at = 0) { return load(n).then(buf => { const s = ac.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; const gg = ac.createGain(); gg.gain.value = g; s.connect(gg).connect(ac.destination); s.start(ac.currentTime + at); }); }
+const scenes = {
+  s_multi: () => { for (let i = 0; i < 5; i++) play(i % 2 ? "cut_b" : "cut_a", 0.8, 1.05 + i * 0.02, i * 0.035); play("multi", 0.5, 1, 0.2); },
+  s_level: () => { play("cut_a", 0.8, 1.05); play("levelup", 0.8, 1.03, 0.05); },
+  s_end: () => { play("gong_end", 0.9, 1.06); play("allcut", 0.9, 1, 0.4); },
+  s_bounce: () => { play("swish", 0.55, 1.15); play("cut_a", 0.3, 1.5, 0.05); play("ricochet", 0.6, 1.0, 0.12); play("cut_b", 0.3, 1.52, 0.17); play("ricochet", 0.6, 1.08, 0.24); play("allcut", 0.75, 1.08, 0.39); },
+  s_boss: () => { play("chop_short", 0.85, 0.95); play("boss_iai_hold", 0.5); play("boss_iai", 1.0, 1, 0.35); },
+  s_perk: () => { play("levelup", 0.8, 1.05); play("perk", 0.85, 1, 0.9); },
+  s_red: () => { play("cut_b", 0.8); play("red_death", 0.9, 1, 0.03); },
+};
+for (const it of items) {
+  if (typeof it === "string") { const h = document.createElement("h4"); h.textContent = it; document.getElementById("b").appendChild(h); continue; }
+  const [label, n] = it;
+  const el = document.createElement("button"); el.textContent = label;
+  el.onclick = () => { ac.resume(); if (scenes[n]) return scenes[n](); if (n !== "combo") return play(n);
+    for (let i = 0; i < 5; i++) { const t = i * 0.28; play("swish", 0.55, 1.15, t); play(i % 2 ? "cut_b" : "cut_a", 0.8, 1.05 + i * 0.02, t + 0.06); play("chop_short", 0.22, 1.3, t + 0.06); } };
+  document.getElementById("b").appendChild(el);
+}
+</script></body></html>
