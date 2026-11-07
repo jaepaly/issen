@@ -14,6 +14,8 @@ python -m http.server 8772
 
 Then open http://127.0.0.1:8772/arena/
 
+Or play online: https://jaepaly.github.io/issen/
+
 ## Rules in one line
 
 Score per slash = (enemies cut in that slash)² × chain multiplier.
