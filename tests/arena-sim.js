@@ -246,5 +246,39 @@ for (const aim of [0.12, 0.3, 0.6, 1.0]) {
   let stopped = 0; for (let i = 0; i < 120 && (s.dash || s.hitstop > 0); i++) { if (s.hitstop > 0) stopped += 1 / 60; A.update(s, 1 / 60); }
   ok(stopped < 0.2, `8명 관통 시 멈춘 시간 합 ${stopped.toFixed(3)}s < 0.2s`);
 }
+// 19. chop 시험 모드(2026-11-08): 몸은 커서 너머 over에서 멈춘다. 최소 min, 최대 벽. 벽에 못 닿으면 검기 반사 없음
+{
+  const C = CFG.chop;
+  const go = (tx, ty, lv = 1, px = 480) => { const s = blank(); s.chop = true; s.lv = lv; s.p.x = px; s.p.y = 270;
+    const pl = A.plan(s, tx, ty); let wv = 0; A.slash(s, tx, ty); for (let i = 0; i < 60 && (s.dash || s.waves.length); i++) { A.update(s, 1 / 60); wv = Math.max(wv, s.waves.length); } return { s, pl, wv }; };
+  const near = go(500, 270);
+  ok(Math.abs(near.s.p.x - (480 + C.min)) < 0.5 && near.pl.L === C.min, `가까운 커서(20) → 최소 ${C.min} 이동(x ${near.s.p.x.toFixed(1)})`);
+  const mid = go(780, 270);
+  ok(Math.abs(mid.s.p.x - (780 + C.over)) < 0.5 && !mid.pl.atWall, `중간 커서(300) → 커서+${C.over}에서 멈춤(x ${mid.s.p.x.toFixed(1)})`);
+  const far = go(900, 270);
+  ok(Math.abs(far.s.p.x - (A.W - CFG.pad)) < 0.5 && far.pl.atWall, `먼 커서 → 벽에서 멈춤(x ${far.s.p.x.toFixed(1)})`);
+  const lvMid = go(780, 270, 6), lvFar = go(900, 270, 6);
+  ok(lvMid.pl.segs.length === 1 && lvMid.wv === 0 && lvFar.pl.segs.length === 3 && lvFar.wv === 1, `LV6: 벽 미도달이면 segs 1개·검기 없음, 벽 도달이면 segs ${lvFar.pl.segs.length}개·검기 있음`);
+  const g = lvMid.pl.segs[0];
+  ok(["x1", "y1", "x2", "y2", "safe", "ux", "uy", "L"].every((k) => k in g) && g.safe === false && Math.abs(g.x2 - 870) < 1e-6 && g.L === lvMid.pl.L, "잘린 첫 구간도 같은 구조(x2·L이 멈출 곳)");
+  const short = go(810, 270, 3, 800);
+  ok(Math.abs(short.s.p.x - (A.W - CFG.pad)) < 0.5 && short.pl.atWall && short.wv === 1, `벽이 min보다 가까우면 벽까지 가고 반사(L ${short.pl.L.toFixed(0)})`);
+  const off = blank(); off.lv = 6; const plOff = A.plan(off, 500, 270);
+  ok(plOff.L === A.W - CFG.pad - 480 && plOff.segs.length === 3 && plOff.atWall, "chop=false면 가까운 커서여도 벽까지(기존 규칙)");
+  const opt = A.createGame(1, { chop: true }), dflt = A.createGame(1);
+  ok(opt.chop === true && dflt.chop === false, "createGame(seed, {chop:true}) 와 기본값 false");
+  // 예약 입력: 돌진이 끝난 새 위치에서 커서까지 거리를 다시 잰다
+  const b = blank(); b.chop = true; A.slash(b, 600, 270); A.update(b, 1 / 60); A.slash(b, 600, 270);
+  run(b, 0.6);
+  ok(Math.abs(b.p.x - 480) < 0.5, `예약 클릭은 새 위치(730)에서 다시 계산: (600) 쪽으로 ${C.min} → x ${b.p.x.toFixed(1)}`);
+  // 붉은 것: 커서 너머 멈출 곳 뒤에 있으면 걸리지 않는다
+  const r = blank(); r.chop = true; r.reds.push({ x: 900, y: 270, vx: 0, vy: 0, r: CFG.red.r, life: 99 });
+  const rp = A.plan(r, 600, 270); A.slash(r, 600, 270); run(r, 0.4);
+  ok(rp.red.length === 0 && r.state === "play", "멈출 곳 너머의 붉은 것은 미리보기에도 실제로도 걸리지 않는다");
+  const rb = blank(); rb.chop = true; A.slash(rb, 600, 270); A.update(rb, 1 / 60); A.slash(rb, 730, 200); // 끝(730,270)에서 위로
+  rb.reds.push({ x: 730, y: 170, vx: 0, vy: 0, r: CFG.red.r, life: 99 }); rb.events.length = 0;
+  const rbe = []; for (let i = 0; i < 40; i++) { A.update(rb, 1 / 60); rbe.push(...rb.events); rb.events.length = 0; }
+  ok(rb.state === "play" && rbe.some((e) => e.type === "bufferCancel"), "chop 예약 입력도 새 경로에 붉은 것이 있으면 취소");
+}
 console.log(fails ? `${fails} failed` : "all passed");
 process.exit(fails ? 1 : 0);

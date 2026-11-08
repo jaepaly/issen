@@ -41,6 +41,9 @@
       firstDelay: 1.5 }, // 첫 붉은 것: 첫 클릭 뒤 이 시간 또는 첫 처치 중 이른 쪽(시작부터 깔려 있던 것을 늦춤)
     maxStep: 1 / 60,    // update는 큰 dt를 이 크기 이하로 나눠 처리한다(저fps에서 판정이 건너뛰지 않게)
     spawnStart: 1.0, spawnMin: 0.4, spawnRamp: 0.035, // 대열이 나오는 간격(초): 빠른 손이 더 벨 수 있게 공급이 넉넉해야 한다
+    // 2026-11-08 시험(사용자 결정: 촥촥 연타가 재미 → 벽 끝까지 튀면 위치를 잃는다): s.chop이면 몸은 커서 너머 over에서 멈춘다.
+    // 최소 거리 min으로 '아주 조금씩 연타해 다 썰기'를 막는다. 벽이 min보다 가까우면 벽까지(벽에 닿을 때만 검기 반사). 판 좌표
+    chop: { min: 250, over: 90 },
   };
 
   function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
@@ -55,9 +58,10 @@
   const dashSpeed = (lv) => CFG.dashSpeed + CFG.dashSpeedPerLv * (lv - 1);
   const widthOf = (lv) => CFG.width + CFG.widthPerLv * (lv - 1);
 
-  function createGame(seed = 7) {
+  function createGame(seed = 7, opts = {}) {
     const s = {
-      W, H, CFG, seed, rand: rng(seed), ctr: {}, t: 0, started: false, state: "play", result: null,
+      // chop: 생성 뒤 s.chop = true/false 대입해도 된다(plan이 매번 읽는다)
+      W, H, CFG, seed, chop: !!(opts && opts.chop), rand: rng(seed), ctr: {}, t: 0, started: false, state: "play", result: null,
       enemies: [], slashes: [], echoes: [], bursts: [], waves: [], nextId: 0, // echoes·bursts는 2026-11-07부터 늘 비어 있다(화면 코드 호환용)
       p: { x: W / 2, y: H / 2, invuln: 0 }, zoom: 1, zoomTarget: 1,
       dash: null, buffer: null, aim: null,
@@ -222,6 +226,12 @@
   }
 
   const bouncesOf = (lv) => CFG.bounce.at.filter((k) => lv >= k).length;
+  // 몸이 갈 거리: 기본은 벽까지. s.chop이면 clamp(커서까지 + over, min, 벽까지)
+  function bodyLen(s, dist, wall) {
+    if (!s.chop) return wall;
+    const C = CFG.chop;
+    return Math.min(wall, Math.max(C.min, dist + C.over));
+  }
 
   // 반사 경로: (x,y)에서 (ux,uy)로 벽까지, 벽 법선 기준 거울 반사를 nb번. 모서리에 닿으면 두 성분 모두 뒤집는다
   // 구간: {x1,y1,x2,y2,safe, ux,uy,L}. safe=true(튕긴 구간)는 붉은 것을 통과한다
@@ -251,12 +261,15 @@
     const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
     if (d < 1) return null;
     const ux = dx / d, uy = dy / d;
-    const segs = tracePath(s, p.x, p.y, ux, uy, bouncesOf(s.lv)), L = segs[0].L;
+    let segs = tracePath(s, p.x, p.y, ux, uy, bouncesOf(s.lv));
+    const wall = segs[0].L, L = bodyLen(s, d, wall), atWall = L >= wall - 1e-6;
+    // chop: 벽에 못 닿고 멈추면 첫 구간만 잘라 남긴다(반사 검기 없음). 구조는 그대로라 조준선·startDash가 따로 알 필요가 없다
+    if (!atWall) { const g = segs[0]; segs = [{ ...g, x2: g.x1 + ux * L, y2: g.y1 + uy * L, L }]; }
     if (L < 8) return null;
     const w = widthOf(s.lv);
     const cut = s.enemies.filter((e) => live(e) && segs.some((g) => onSeg(g, e.x, e.y, e.r + w)));
     const red = s.reds.filter((q) => onSeg(segs[0], q.x, q.y, q.r + w));
-    return { ux, uy, L, cut, red, segs };
+    return { ux, uy, L, cut, red, segs, atWall };
   }
 
   function setAim(s, tx, ty) { s.aim = { x: tx, y: ty }; }
@@ -519,7 +532,7 @@
           // 내 조준선이 오래 머물면 옆으로 비킨다: 고르는 사이에 어긋난다
           if (aim && !s.dash) {
             const ad = Math.hypot(aim.x - p.x, aim.y - p.y) || 1, ux = (aim.x - p.x) / ad, uy = (aim.y - p.y) / ad;
-            const L = rayToWall(s, p.x, p.y, ux, uy);
+            const L = bodyLen(s, ad, rayToWall(s, p.x, p.y, ux, uy)); // chop이면 실제로 갈 몸 길이만 본다
             const on = segDist(p.x, p.y, p.x + ux * L, p.y + uy * L, e.x, e.y) <= e.r + widthOf(s.lv) + 14;
             e.watch = on ? e.watch + dt : 0;
             if (e.watch >= CFG.dodgeWatch && e.cd <= 0) {
@@ -555,6 +568,6 @@
     s.events.push({ type: "end", kind, remaining: s.enemies.filter(live).length });
   }
 
-  const api = { W, H, CFG, bounds, createGame, plan, slash, setAim, update, spawnWave, spawnBanner, levelOf, widthOf, add, bouncesOf, tracePath };
+  const api = { W, H, CFG, bounds, createGame, plan, slash, setAim, update, spawnWave, spawnBanner, levelOf, widthOf, add, bouncesOf, tracePath, bodyLen };
   if (typeof module !== "undefined") module.exports = api; else root.Arena = api;
 })(this);

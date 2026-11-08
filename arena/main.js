@@ -22,8 +22,12 @@
   const today = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
   let mode = store.get("arena-mode") === "random" ? "random" : "daily";
   let seed = 0, firstRun = !store.get("arena-played"), titleOn = true, copied = 0, resultAt = 0, heldAtEnd = false, pointerHeld = false;
-  function newGame() { seed = mode === "daily" ? today() : (Math.random() * 1e9) | 0; return createGame(seed); }
-  const dailyKey = () => "arena-daily-" + (mode === "daily" && seed ? seed : today());
+  // 이동 방식(2026-11-08): SHORT = 커서 근처에서 멈춘다(game.js 의 s.chop), WALL = 벽까지 돌진. 기록은 방식별로 따로 둔다(섞이면 비교가 무의미)
+  let chopOn = store.get("arena-chop") !== "0";
+  const CK = () => (chopOn ? "-chop" : ""); // WALL 은 예전 키 그대로(기존 기록은 벽 돌진 기록이다)
+  function newGame() { seed = mode === "daily" ? today() : (Math.random() * 1e9) | 0; const g = createGame(seed); g.chop = chopOn; return g; }
+  const dailyKey = () => "arena-daily-" + (mode === "daily" && seed ? seed : today()) + CK();
+  const bestKey = () => "arena-best-score" + CK();
   let s = newGame();
   let mouse = { x: W / 2 + 120, y: H / 2 - 80 };
   // 그림: Codex CLI 이미지 생성(art/*_src.png) → tools/prep-art.py 가 arena/img 로 정리. 못 불러오면 도형으로 그린다
@@ -38,9 +42,9 @@
   const SIZE = { soldier: 1.25, runner: 1.3, dodger: 1.3, elite: 1.2, boss: 1.15, banner: 1.25 }; // 판정 반지름 대비 그림 몸통 크기
   let decals = [], groundPat = null, bossWarn = null, aimDanger = false;
   let vk = 1, last = 0, endAt = 0, particles = [], halves = [], pops = [], flash = 0, lvPop = null;
-  let best = +store.get("arena-best-score") || 0, dayBest = +store.get(dailyKey()) || 0;
+  let best = +store.get(bestKey()) || 0, dayBest = +store.get(dailyKey()) || 0;
   // 페이스 비교: 최고 기록 판의 점수 곡선(0.5초 간격 41칸)을 저장해 두고, 판 도중 같은 시각의 점수와 비교한다
-  const PACE_STEP = 0.5, curveKey = () => (mode === "daily" ? dailyKey() + "-curve" : "arena-best-curve");
+  const PACE_STEP = 0.5, curveKey = () => (mode === "daily" ? dailyKey() + "-curve" : "arena-best-curve" + CK());
   const loadCurve = () => { try { const c = JSON.parse(store.get(curveKey()) || "null"); return Array.isArray(c) && c.length ? c : null; } catch (e) { return null; } };
   let run = [], ghost = loadCurve(), paceSplit = 0, pacePop = null;
 
@@ -140,7 +144,7 @@
   const COPY_BTN = { x: W / 2 - 110, y: 382, w: 220, h: 32 };
   function shareLine() {
     const r = s.result;
-    return `${TITLE} ${r.score} (${gradeOf(r.score)}) · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed}`;
+    return `${TITLE} ${r.score} (${gradeOf(r.score)}) · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed}${r.chop ? "" : " · wall"}`;
   }
   function copyResult() {
     const t = shareLine();
@@ -148,19 +152,22 @@
   }
   // 판 끝: 전체 최고점과 (일일 모드면) 오늘 최고점을 따로 저장. 첫 판 안내 꼬리표는 한 판 끝나면 끈다
   function recordResult(r) {
-    r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed;
+    r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed; r.chop = chopOn;
     run.push(r.score); // 마지막 칸은 최종 점수
     const hbNow = mode === "daily" ? dayBest : best;
     if (r.score > hbNow) store.set(curveKey(), JSON.stringify(run));
-    if (r.score > best) { best = r.score; r.newBest = best > 0; store.set("arena-best-score", best); }
+    if (r.score > best) { best = r.score; r.newBest = best > 0; store.set(bestKey(), best); }
     if (mode === "daily" && r.score > dayBest) { dayBest = r.score; r.newDay = dayBest > 0; store.set(dailyKey(), dayBest); }
     store.set("arena-played", 1); firstRun = false;
   }
   function toggleMode() { mode = mode === "daily" ? "random" : "daily"; store.set("arena-mode", mode); }
+  function toggleChop() { chopOn = !chopOn; store.set("arena-chop", chopOn ? 1 : 0); } // 기록(best·곡선)은 restart 에서 새 방식 것으로 다시 읽는다
+  const moveName = () => (chopOn ? "SHORT" : "WALL");
   cv.addEventListener("contextmenu", (e) => e.preventDefault());
   addEventListener("keydown", (e) => {
     const atEnd = s.state === "end", fresh = s.state === "play" && !s.started;
     if (e.code === "KeyT" && (titleOn || atEnd || fresh)) { toggleMode(); if (!atEnd) restart(); return; } // 시작 전·결과 화면에서만 시드 전환
+    if (e.code === "KeyM" && (titleOn || atEnd || fresh)) { toggleChop(); if (!atEnd) restart(); return; } // 이동 방식도 같은 규칙
     if (e.code === "KeyC" && atEnd) { copyResult(); return; }
     if (e.code === "KeyR" || e.code === "Space") {
       e.preventDefault();
@@ -172,7 +179,7 @@
   });
   // 화면 좌표 → 싸움판 좌표(배율이 낮아지면 같은 화면에 더 넓은 판이 보인다)
   function world() { const z = s.zoom; return { x: (mouse.x - W / 2) / z + W / 2, y: (mouse.y - H / 2) / z + H / 2 }; }
-  function restart() { decals = []; bossWarn = null; s = newGame(); dayBest = +store.get(dailyKey()) || 0; particles = []; halves = []; pops = []; lvPop = null; strokes = []; endFx = null; bossFx = null; perkPop = null; run = []; ghost = loadCurve(); paceSplit = 0; pacePop = null; }
+  function restart() { decals = []; bossWarn = null; s = newGame(); best = +store.get(bestKey()) || 0; dayBest = +store.get(dailyKey()) || 0; particles = []; halves = []; pops = []; lvPop = null; strokes = []; endFx = null; bossFx = null; perkPop = null; run = []; ghost = loadCurve(); paceSplit = 0; pacePop = null; }
 
   // 레벨별 이펙트 단계(옛 주석 "붉은 심 → 붉은 빛"은 실제 색과 달랐다. 빨강은 붉은 유닛 전용이라 이펙트에 쓰지 않는다)
   // tier: 0 먹(LV1~2) → 1 검사 기운(LV3~4) → 2 짙은 먹 기운(LV5~6) → 3 금빛(LV7+). HUD 색 등에 쓴다
@@ -573,12 +580,15 @@
 
     // 검사: 레벨이 오르면 기운이 둘린다(그림자 흐림 대신 옅은 먹/금빛 번짐 한 겹)
     if (stage(s.lv) >= 1) circle(p.x, p.y, 24 * vk, stage(s.lv) >= 2 ? "rgba(224,164,18,0.28)" : "rgba(29,26,23,0.13)");
-    // 내 위치 표시(정리 2026-11-07): 화면 배율과 상관없이 같은 크기의 종이색 원판 + 먹 고리. 무엇이 날아다녀도 나를 먼저 찾게
-    if (s.state === "play") { const zz = s.zoom || 1; circle(p.x, p.y, 21 / zz, "rgba(239,231,214,0.75)"); circle(p.x, p.y, 21 / zz, null, "rgba(29,26,23,0.85)", 2.5 / zz); }
+    // 내 위치 표시(정리 2026-11-07, 2026-11-08 반전): 종이색 원판은 바탕과 같아 안 보였다 → 화면 크기가 일정한 진한 먹 원판 + 바깥 ACC 고리.
+    // 화면에서 '반전된 원'은 검사 하나뿐이게 한다. 검사 그림은 그 위에 흰 실루엣 테두리를 받쳐 그린다
+    const disc = s.state === "play";
+    if (disc) { const zz = s.zoom || 1; circle(p.x, p.y, 21 / zz, "rgba(29,26,23,0.85)"); circle(p.x, p.y, 22 / zz, null, ACC, 2 / zz); }
     const blink = p.invuln > 0 && Math.floor(now / 70) % 2;
     if (!blink) {
       if (ok("hero")) {
         const m = world(), ang = s.dash ? Math.atan2(s.dash.uy, s.dash.ux) : Math.atan2(m.y - p.y, m.x - p.x);
+        if (disc && whiteOf("hero")) { const half = 19 * vk / (META.hero || 0.35), o = 1.6 / (s.zoom || 1); ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ang); for (const [dx, dy] of [[o, 0], [-o, 0], [0, o], [0, -o]]) ctx.drawImage(WHITE.hero, -half + dx, -half + dy, half * 2, half * 2); ctx.restore(); }
         sprite("hero", p.x, p.y, ang, 19 * vk);
       } else circle(p.x, p.y, 12 * vk, "#fff", tr >= 3 ? GOLD : INK, 3 * vk);
     }
@@ -598,7 +608,7 @@
       }
       ctx.lineCap = "butt";
       for (let i = 1; i < Math.min(2, sg.length); i++) { const q = sg[i], c = i === 1 && danger ? RED : INK; ctx.save(); ctx.translate(q.x1, q.y1); ctx.rotate(Math.PI / 4); ctx.strokeStyle = "rgba(239,231,214,0.85)"; ctx.lineWidth = 4 / z; ctx.strokeRect(-4.5 / z, -4.5 / z, 9 / z, 9 / z); ctx.strokeStyle = c; ctx.lineWidth = 1.8 / z; ctx.strokeRect(-4.5 / z, -4.5 / z, 9 / z, 9 / z); ctx.restore(); } // 반사 지점: 작은 마름모
-      if (sg.length === 1) circle(sg[0].x2, sg[0].y2, 6 / z, danger ? RED : INK); // 일섬이 멈출 벽 지점(반사가 있으면 마름모가 대신)
+      if (sg.length === 1) { const c = danger ? RED : INK; circle(sg[0].x2, sg[0].y2, 8 / z, null, "rgba(239,231,214,0.85)", 5 / z); circle(sg[0].x2, sg[0].y2, 8 / z, null, c, 2.2 / z); circle(sg[0].x2, sg[0].y2, 2 / z, c); } // 몸이 멈출 자리: 작은 먹 고리(벽에 닿아 반사가 있으면 마름모가 대신)
       const g0 = sg[0], wB = Arena.widthOf(s.lv);
       if (rdy) for (const e of pl.cut) { const own = segD(g0.x1, g0.y1, g0.x2, g0.y2, e.x, e.y) <= e.r + wB; circle(e.x, e.y, e.r * (e.type === "banner" ? vk : 1) + 6 / z, null, own ? ACC : "rgba(47,93,138,0.35)", (own ? 3 : 1.5) / z); } // 검기에 걸릴 적은 옅게
       for (const q of pl.red) circle(q.x, q.y, q.r * vk * 1.3 + 6 / z, null, RED, 4 / z);
@@ -649,6 +659,7 @@
     }
     text(left.toFixed(1), W - 26, 44, 18, INK, "right");
     text(mode === "daily" ? "DAILY" : "RANDOM", W - 26, 60, 11, "rgba(29,26,23,0.45)", "right");
+    text("MOVE " + moveName(), W - 26, 73, 10, "rgba(29,26,23,0.4)", "right");
     const L = CFG.levels, lo = L[s.lv - 1], hi = L[s.lv] ?? lo, k = hi > lo ? (s.xp - lo) / (hi - lo) : 1;
     ctx.fillStyle = "rgba(29,26,23,0.12)"; ctx.fillRect(20, H - 14, W - 40, 5);
     ctx.fillStyle = tr >= 3 ? GOLD : ACC; ctx.fillRect(20, H - 14, (W - 40) * k, 5);
@@ -698,7 +709,7 @@
     circle(rx, ry, 31, null, "rgba(200,36,27,0.5)", 2);
     line(rx - 44, ry + 44, rx + 44, ry - 44, RED, 4); // 금지 사선
     const hb = mode === "daily" ? dayBest : best;
-    text((mode === "daily" ? "DAILY " + seed : "RANDOM") + "   ·   T to switch" + (hb > 0 ? "   ·   best " + fmt(hb) : ""), W / 2, 418, 14, "rgba(29,26,23,0.6)");
+    text((mode === "daily" ? "DAILY " + seed : "RANDOM") + "   ·   T to switch   ·   M  move: " + moveName() + (hb > 0 ? "   ·   best " + fmt(hb) : ""), W / 2, 418, 14, "rgba(29,26,23,0.6)");
     const a = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now / 260));
     text("Click to start", W / 2, 470, 22, `rgba(29,26,23,${a})`);
   }
@@ -745,7 +756,7 @@
     text(cMsg, W / 2, b.y + 22, 15, copied < 0 && cAge < 1.6 ? RED : INK);
     // 재시작 안내: 클릭은 1.2초 뒤부터
     const clickOk = t > 1.2 && !heldAtEnd;
-    text("R / Space  retry" + (clickOk ? "   ·   click  retry" : "") + "   ·   T  next run: " + (mode === "daily" ? "DAILY" : "RANDOM"), W / 2, 456, 15, "rgba(29,26,23,0.6)");
+    text("R / Space  retry" + (clickOk ? "   ·   click  retry" : "") + "   ·   T  next run: " + (mode === "daily" ? "DAILY" : "RANDOM") + "   ·   M  move: " + moveName(), W / 2, 456, 15, "rgba(29,26,23,0.6)");
     ctx.restore();
     // 결과 화면에서는 시스템 커서 대신 작은 점
     circle(mouse.x, mouse.y, 4, INK);
