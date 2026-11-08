@@ -39,6 +39,10 @@
   let decals = [], groundPat = null, bossWarn = null, aimDanger = false;
   let vk = 1, last = 0, endAt = 0, particles = [], halves = [], pops = [], flash = 0, lvPop = null;
   let best = +store.get("arena-best-score") || 0, dayBest = +store.get(dailyKey()) || 0;
+  // 페이스 비교: 최고 기록 판의 점수 곡선(0.5초 간격 41칸)을 저장해 두고, 판 도중 같은 시각의 점수와 비교한다
+  const PACE_STEP = 0.5, curveKey = () => (mode === "daily" ? dailyKey() + "-curve" : "arena-best-curve");
+  const loadCurve = () => { try { const c = JSON.parse(store.get(curveKey()) || "null"); return Array.isArray(c) && c.length ? c : null; } catch (e) { return null; } };
+  let run = [], ghost = loadCurve(), paceSplit = 0, pacePop = null;
 
   // ---------- 소리 ----------
   let ac = null;
@@ -145,6 +149,9 @@
   // 판 끝: 전체 최고점과 (일일 모드면) 오늘 최고점을 따로 저장. 첫 판 안내 꼬리표는 한 판 끝나면 끈다
   function recordResult(r) {
     r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed;
+    run.push(r.score); // 마지막 칸은 최종 점수
+    const hbNow = mode === "daily" ? dayBest : best;
+    if (r.score > hbNow) store.set(curveKey(), JSON.stringify(run));
     if (r.score > best) { best = r.score; r.newBest = best > 0; store.set("arena-best-score", best); }
     if (mode === "daily" && r.score > dayBest) { dayBest = r.score; r.newDay = dayBest > 0; store.set(dailyKey(), dayBest); }
     store.set("arena-played", 1); firstRun = false;
@@ -165,7 +172,7 @@
   });
   // 화면 좌표 → 싸움판 좌표(배율이 낮아지면 같은 화면에 더 넓은 판이 보인다)
   function world() { const z = s.zoom; return { x: (mouse.x - W / 2) / z + W / 2, y: (mouse.y - H / 2) / z + H / 2 }; }
-  function restart() { decals = []; bossWarn = null; s = newGame(); dayBest = +store.get(dailyKey()) || 0; particles = []; halves = []; pops = []; lvPop = null; strokes = []; endFx = null; bossFx = null; perkPop = null; }
+  function restart() { decals = []; bossWarn = null; s = newGame(); dayBest = +store.get(dailyKey()) || 0; particles = []; halves = []; pops = []; lvPop = null; strokes = []; endFx = null; bossFx = null; perkPop = null; run = []; ghost = loadCurve(); paceSplit = 0; pacePop = null; }
 
   // 레벨별 이펙트 단계(옛 주석 "붉은 심 → 붉은 빛"은 실제 색과 달랐다. 빨강은 붉은 유닛 전용이라 이펙트에 쓰지 않는다)
   // tier: 0 먹(LV1~2) → 1 검사 기운(LV3~4) → 2 짙은 먹 기운(LV5~6) → 3 금빛(LV7+). HUD 색 등에 쓴다
@@ -635,6 +642,11 @@
     text(fmt(s.score), 26, 50, 30, INK, "left");
     const hb = mode === "daily" ? dayBest : best;
     if (hb > 0) text((mode === "daily" ? "TODAY BEST " : "BEST ") + fmt(hb), 28, 68, 12, s.score > hb ? GOLD : "rgba(29,26,23,0.55)", "left");
+    const pd = paceDelta();
+    if (pd !== null && s.started) { // 같은 시각의 최고 기록 판보다 앞서면 금색, 뒤지면 회색. 5·10·15초에 한 번씩 크게 튄다
+      const pp = pacePop && now - pacePop.born < 900 ? 1 - (now - pacePop.born) / 900 : 0;
+      text((pd >= 0 ? "+" : "−") + fmt(Math.abs(pd)) + (pp > 0 ? "  @" + pacePop.at + "s" : ""), 28, 90 + pp * 6, 15 + pp * 13, pd >= 0 ? GOLD : "rgba(29,26,23,0.5)", "left");
+    }
     text(left.toFixed(1), W - 26, 44, 18, INK, "right");
     text(mode === "daily" ? "DAILY" : "RANDOM", W - 26, 60, 11, "rgba(29,26,23,0.45)", "right");
     const L = CFG.levels, lo = L[s.lv - 1], hi = L[s.lv] ?? lo, k = hi > lo ? (s.xp - lo) / (hi - lo) : 1;
@@ -739,10 +751,25 @@
     circle(mouse.x, mouse.y, 4, INK);
   }
 
+  // 판 도중 점수 곡선 기록과 구간(5·10·15초) 알림
+  function trackPace(now) {
+    if (!s.started || s.state !== "play") return;
+    const i = Math.min(Math.round(CFG.limit / PACE_STEP), Math.floor(s.t / PACE_STEP));
+    while (run.length <= i) run.push(s.score);
+    run[i] = s.score;
+    const sp = Math.floor(s.t / 5) * 5;
+    if (sp > paceSplit && sp < CFG.limit) { paceSplit = sp; const d = paceDelta(); if (d !== null) { pacePop = { born: now, at: sp, d }; play(["tick"], d >= 0 ? 0.5 : 0.25, d >= 0 ? 1.25 : 0.8); } }
+  }
+  function paceDelta() {
+    if (!ghost || !s.started) return null;
+    const i = Math.min(ghost.length - 1, Math.floor(s.t / PACE_STEP));
+    return s.score - ghost[i];
+  }
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000 || 0);
     last = now;
     update(s, dt);
+    trackPace(now);
     handleEvents(now);
     draw(now, dt);
     requestAnimationFrame(frame);
