@@ -24,8 +24,11 @@
   // 이동 방식: 2026-11-08 SHORT(커서 근처에서 멈춤, game.js 의 s.chop)와 WALL(벽까지 돌진)을 M 키로 골랐다.
   // 2026-11-09 사용자 승인으로 WALL 은 플레이어 쪽에서 걷어 내고 항상 SHORT. 기록 키는 SHORT 가 쓰던 -chop 접미사 그대로(기존 SHORT 기록 보존).
   // 옛 WALL 기록(접미사 없는 키)은 읽지 않는다. game.js 의 chop=false 경로는 테스트용으로 남아 있다
-  const CK = () => "-chop";
-  function newGame() { seed = mode === "daily" ? today() : (Math.random() * 1e9) | 0; const g = createGame(seed); g.chop = true; return g; }
+  // 2026-11-09 v2 재설계: 점수 단위가 바뀌어(처치 수 × 연쇄 배율) 기록 키에 -v2. 일섬 속도(V 키, instant/dash)도 섞이지 않게 키를 나눈다. 옛 -chop 기록은 읽지 않는다
+  // instant: 몸 돌진이 거의 즉시(game.js 의 s.instant). 기본 on. 시작·결과 화면에서 V 로 바꾼다(A/B 비교용)
+  let instant = store.get("arena-instant") !== "0";
+  const CK = () => "-v2" + (instant ? "-instant" : "-dash");
+  function newGame() { seed = mode === "daily" ? today() : (Math.random() * 1e9) | 0; const g = createGame(seed); g.chop = true; g.instant = instant; return g; }
   const dailyKey = () => "arena-daily-" + (mode === "daily" && seed ? seed : today()) + CK();
   const bestKey = () => "arena-best-score" + CK();
   let s = newGame();
@@ -41,7 +44,7 @@
   }
   const SIZE = { soldier: 1.25, runner: 1.3, dodger: 1.3, elite: 1.2, boss: 1.15, banner: 1.25 }; // 판정 반지름 대비 그림 몸통 크기
   let decals = [], groundPat = null, bossWarn = null, aimDanger = false;
-  let vk = 1, last = 0, endAt = 0, particles = [], halves = [], pops = [], flash = 0, lvPop = null;
+  let vk = 1, last = 0, endAt = 0, particles = [], halves = [], pops = [], flash = 0;
   let best = +store.get(bestKey()) || 0, dayBest = +store.get(dailyKey()) || 0;
   // 페이스 비교: 판의 점수 곡선(0.5초 간격 41칸)을 저장해 두고, 판 도중 같은 시각의 점수와 비교한다
   // 비교 대상(2026-11-09): 오늘 최고(일일 모드) → 전체 최고 → 직전 판. 무엇과 비교 중인지 왼쪽 위에 작게 쓴다
@@ -105,24 +108,51 @@
     src2.connect(lp).connect(g2).connect(a.destination); src2.start(t);
   }
   // 녹음 효과음: Kenney "RPG Audio"(CC0, arena/sfx/LICENSE-kenney-rpg-audio.txt). 못 불러오면 합성음으로 대신한다
-  const SFX = {}, SFX_NAMES = ["cut_a", "cut_b", "swish", "chop_short", "cloth2", "cloth4", "levelup", "banner", "multi", "elite_down", "boss_warn", "boss_down", "red_death", "hurt", "gong_end", "allcut", "tick", "ricochet", "perk", "boss_iai_hold", "boss_iai"]; // 앞 6개: RPG Audio 앞부분만 잘라 짧게(0.11~0.13초). 나머지: Impact Sounds(CC0)를 겹치고 피치를 바꿔 만든 것(tools/build-sfx.py)
+  const SFX = {}, SFX_NAMES = ["cut_a", "cut_b", "swish", "chop_short", "cloth2", "cloth4", "levelup", "banner", "multi", "elite_down", "boss_warn", "boss_down", "red_death", "hurt", "gong_end", "allcut", "tick", "ricochet", "perk"]; // 2026-11-09 boss_iai_hold·boss_iai 는 보스 발도(판 비우기)가 빠져 안 쓴다 // 앞 6개: RPG Audio 앞부분만 잘라 짧게(0.11~0.13초). 나머지: Impact Sounds(CC0)를 겹치고 피치를 바꿔 만든 것(tools/build-sfx.py)
   let sfxLoaded = false;
   function loadSfx() {
     const a = audio(); if (!a || sfxLoaded) return; sfxLoaded = true;
     for (const n of SFX_NAMES) fetch("sfx/" + n + ".mp3").then((r) => r.arrayBuffer()).then((b) => a.decodeAudioData(b)).then((buf) => { SFX[n] = buf; }).catch(() => {});
   }
-  function play(names, gain = 0.6, rate = 1) {
+  // at: 지금부터 몇 초 뒤에 낼지(아르페지오 예약), jit: 음높이를 ±6% 흔들지(음계를 타는 베기 소리는 끈다)
+  function play(names, gain = 0.6, rate = 1, at = 0, jit = true) {
     const a = audio(); if (!a) return false;
     const n = names[Math.floor(Math.random() * names.length)], buf = SFX[n];
     if (!buf) return false;
-    const src = a.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
+    const src = a.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate * (jit ? 0.94 + Math.random() * 0.12 : 1);
     const g = a.createGain(); g.gain.value = gain;
-    src.connect(g).connect(a.destination); src.start();
+    src.connect(g).connect(a.destination); src.start(a.currentTime + at);
     return true;
   }
-  let lastCut = 0;
-  const BOSS_IAI_SFX_MS = 350; // 대장군 발도: 쓰러진 순간 boss_iai_hold, 이 시간 뒤 boss_iai(R2의 갈라짐 지연과 맞출 것)
-  let bossIaiSfxAt = -1;
+  // ---- 연쇄 음계(2026-11-09 v2) ----
+  // 연쇄가 1 오를 때마다 베기 샘플을 5음 음계로 한 칸 올린다(도·레·미·솔·라·도'). 연쇄 6부터는 맨 위 도'에 머문다(옥타브 순환은 '끊겼다'로 들릴 수 있어 쓰지 않음)
+  // 한 일섬에 여럿을 베면 그 위로 한 칸씩 짧게 오르는 아르페지오(15~25ms 간격). 레'(2.25)를 넘치면 맨 위 세 음(라·도'·레')을 돌아 같은 음이 겹치지 않게
+  const SCALE = [1, 1.125, 1.25, 1.5, 1.667, 2, 2.25], CHAIN_TOP = 5, CUT_VOICES = 6;
+  let cutVoices = [], dashNotes = 0, noteChain = 0;
+  function cutNotes(n, base) {
+    const a = audio(); if (!a) return;
+    const t0 = a.currentTime;
+    cutVoices = cutVoices.filter((t) => t > t0);
+    const k = Math.min(n, CUT_VOICES - cutVoices.length); // 동시에 울리는 베기 소리는 6개까지
+    let off = 0;
+    for (let j = 0; j < k; j++) {
+      const up = base + dashNotes, top = SCALE.length - 1, idx = up <= top ? up : top - 2 + (up - top + 2) % 3, rate = SCALE[idx], g = (j || dashNotes ? 0.55 : 0.8) * Math.pow(rate, -0.35); // 높을수록 얇게 들려 조금 줄인다
+      if (play(["cut_a", "cut_b"], g, rate, off, false)) { if (!j && !dashNotes) play(["chop_short"], 0.28, 1.2, 0, true); }
+      else if (!j) chwak(0.7, 2800 * rate);
+      cutVoices.push(t0 + off + 0.14 / rate);
+      dashNotes++; off += 0.015 + Math.random() * 0.01;
+    }
+  }
+  // 이번 적중이 받을 연쇄 번호(1부터). game.js 가 hit 에 chain 을 실어 보내면 그것을, 아니면 지금 연쇄 + 1(이어 벨 시간이 지났으면 1)
+  function chainOfHit(ev) {
+    const lapsed = s.lastHitT != null && s.t - s.lastHitT > CFG.chainWindow;
+    if (ev.chain != null && !(lapsed && ev.chain === s.chain + 1)) return ev.chain;
+    return lapsed ? 1 : (s.chain || 0) + 1;
+  }
+  // 연쇄가 끊길 때: 낮고 짧은 '툭' 한 번
+  function chainBreakSfx() { tone(104, 0.09, "triangle", 0.13); noise(0.05, 240, 0.16); }
+  // 광란 시작: 맑은 두 음이 짧게 오른다(보스 처치음 뒤에 살짝 늦게)
+  function frenzySfx() { tone(1175, 0.18, "sine", 0.06); setTimeout(() => { tone(1568, 0.22, "sine", 0.06); tone(2349, 0.3, "sine", 0.025); }, 70); noise(0.18, 6000, 0.05); }
   function tone(freq, dur, type = "triangle", gain = 0.1) {
     const a = audio(); if (!a) return;
     const o = a.createOscillator(), g = a.createGain();
@@ -153,7 +183,7 @@
   const COPY_BTN = { x: W / 2 - 110, y: 382, w: 220, h: 32 };
   function shareLine() {
     const r = s.result;
-    return `${TITLE} ${r.score} · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed} · ${SHARE_URL}`;
+    return `${TITLE} ${r.score} · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed}${r.instant === false ? " · dash" : ""} · ${SHARE_URL}`;
   }
   function copyResult() {
     const t = shareLine();
@@ -161,7 +191,7 @@
   }
   // 판 끝: 전체 최고점과 (일일 모드면) 오늘 최고점을 따로 저장. 첫 판 안내 꼬리표는 한 판 끝나면 끈다
   function recordResult(r) {
-    r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed;
+    r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed; r.instant = instant;
     run.push(r.score); // 마지막 칸은 최종 점수
     const curve = JSON.stringify(run);
     store.set(lastCurveKey(), curve); // 직전 판: 최고 곡선이 없을 때의 비교 대상
@@ -172,11 +202,13 @@
     store.set("arena-played", 1); firstRun = false;
   }
   function toggleMode() { mode = mode === "daily" ? "random" : "daily"; store.set("arena-mode", mode); }
+  function toggleInstant() { instant = !instant; store.set("arena-instant", instant ? 1 : 0); }
   cv.addEventListener("contextmenu", (e) => e.preventDefault());
   addEventListener("keydown", (e) => {
     wakeAudio(); loadSfx();
     const atEnd = s.state === "end", fresh = s.state === "play" && !s.started;
     if (e.code === "KeyT" && (titleOn || atEnd || fresh)) { toggleMode(); if (!atEnd) restart(); return; } // 시작 전·결과 화면에서만 시드 전환
+    if (e.code === "KeyV" && (titleOn || atEnd)) { toggleInstant(); if (!atEnd) restart(); return; } // 일섬 속도 A/B: 시작·결과 화면에서만. 결과 화면이면 다음 판부터
     if (e.code === "KeyC" && atEnd) { copyResult(); return; }
     if (e.code === "KeyR" || e.code === "Space") {
       e.preventDefault();
@@ -188,7 +220,7 @@
   });
   // 화면 좌표 → 싸움판 좌표(배율이 낮아지면 같은 화면에 더 넓은 판이 보인다)
   function world() { const z = s.zoom; return { x: (mouse.x - W / 2) / z + W / 2, y: (mouse.y - H / 2) / z + H / 2 }; }
-  function restart() { decals = []; bossWarn = null; s = newGame(); best = +store.get(bestKey()) || 0; dayBest = +store.get(dailyKey()) || 0; particles = []; halves = []; pops = []; lvPop = null; strokes = []; endFx = null; bossFx = null; perkPop = null; run = []; ghost = loadCurve(); paceSplit = 0; pacePop = null; }
+  function restart() { decals = []; bossWarn = null; s = newGame(); best = +store.get(bestKey()) || 0; dayBest = +store.get(dailyKey()) || 0; particles = []; halves = []; pops = []; lvAt = 0; strokes = []; endFx = null; frenzy = null; perkPop = null; run = []; ghost = loadCurve(); paceSplit = 0; pacePop = null; dashNotes = 0; noteChain = 0; }
 
   // 레벨별 이펙트 단계(옛 주석 "붉은 심 → 붉은 빛"은 실제 색과 달랐다. 빨강은 붉은 유닛 전용이라 이펙트에 쓰지 않는다)
   // tier: 0 먹(LV1~2) → 1 검사 기운(LV3~4) → 2 짙은 먹 기운(LV5~6) → 3 금빛(LV7+). HUD 색 등에 쓴다
@@ -216,16 +248,13 @@
   }
   // 적중한 적: 맞은 프레임에 바로 두 쪽 + 먹 방울(소리와 같은 프레임). game.js 의 split 사건은 그림에는 쓰지 않는다
   const cutSeen = new WeakSet();
-  // 발도 연출(2026-11-07, 멈칫 대신): 일섬 도중 벤 적은 칼빛만 남긴 채 그 자리에 서 있다가, 일섬이 끝난 뒤 한 박자에 일제히 갈라진다
-  const IAI_BEAT = 90; // ms: 벽에 닿은 뒤 갈라지기까지
-  let iaiAt = 0;
+  // 2026-11-09 v2(사용자 승인): 일섬이 끝날 때까지 벤 적을 붙잡아 두던 지연 분리(발도 연출)를 걷어 냈다. 맞은 그 프레임에 갈라지고 소리도 그때 난다.
+  // 묶음의 쾌감은 여러 명을 한꺼번에 벨 때의 아르페지오(cutNotes)가 맡는다
   function splitNow(e, now, extra) {
     cutSeen.add(e);
     const kind = e.type;
     const h = { x: e.x, y: e.y, cut: e.cut, r: e.r || CFG.radius[kind] || 13, kind, face: e.face || 0, born: now, ...extra };
     halves.push(h);
-    if (!extra && (s.dash || (s.waves && s.waves.length)) && s.state === "play") { h.hold = 1e9; h.deferred = true; return; } // 일섬이 끝날 때까지 붙어 서 있다
-    if (h.boss) return; // 대장군 발도: 먹 튐은 일제히 갈라질 때(bossIaiRelease)
     splatAt(h);
   }
   function splatAt(e) {
@@ -235,33 +264,13 @@
     const sk = "splat" + (1 + Math.floor(Math.random() * 3));
     if (ok(sk)) { const dc = { k: sk, x: e.x, y: e.y, ang: Math.random() * 6.28, size: (e.r || 13) * (1.1 + st * 0.15), a: Math.max(0.12, 0.32 - decals.length * 0.002) }; decals.push(dc); bgNew.push(dc); if (decals.length > 140) decals.shift(); } // 쌓일수록 옅게(정리 2026-11-07)
   }
-  function iaiRelease(now, all) { // 묶어 둔 적을 한꺼번에 가른다(all이 아니면 끝난 일섬의 몫만)
-    let n = 0;
-    for (const h of halves) if (h.deferred && (all || h.ready)) { h.deferred = false; h.hold = now - h.born; h.whiteEnd = h.hold + 60; splatAt(h); n++; }
-    if (!n) return;
-    s.shake = Math.max(s.shake, Math.min(6, 2 + n * 0.4)); // 2026-11-07 사용자: 후반에 화면이 너무 흔들림 → 평소 흔들림은 6 이하, 큰 흔들림은 보스·빨간 유닛·끝맺음만 if (n >= 3) flash = Math.max(flash, Math.min(0.12, 0.02 * n));
-    if (n >= 4) { if (!play(["allcut"], Math.min(0.9, 0.45 + n * 0.05), 1.08)) chwak(0.8, 2600, 0.2); }
-    else if (play(["cut_a", "cut_b"], 0.85, 1.0)) play(["chop_short"], 0.3, 1.2); else chwak(0.7, 2800);
-  }
-  // 대장군 발도(2026-11-07 사용자 결정): 대장군을 쓰러뜨리면 판 위 모든 적이 하얗게 번쩍 → 칼빛만 남긴 채 서 있다가 BOSS_HOLD 뒤 일제히 갈라진다. 세계는 멈추지 않는다
-  const BOSS_HOLD = BOSS_IAI_SFX_MS; // 소리(R3)와 같은 상수: 갈라짐과 '촥'이 같은 순간
-  let bossFx = null, perkPop = null;
-  const bossExtra = () => ({ hold: BOSS_HOLD, life: 900 + Math.random() * 300, boss: true });
-  function bossIaiStart(ev, now) {
-    bossFx = { born: now, at: now + BOSS_HOLD, x: ev.x, y: ev.y, hits: ev.hits || 0, pts: ev.pts || 0, mult: ev.mult || 1, done: false };
-    const ids = new Set(ev.ids || []);
-    for (const e of s.enemies) {
-      if (cutSeen.has(e) || !(ids.has(e.id) || (e.type === "boss" && e.dying > 0))) continue;
-      if (e.type !== "boss") e.cut = Math.atan2(ev.y - e.y, ev.x - e.x) + (Math.random() - 0.5) * 0.5; // 칼빛: 대장군 쪽을 향한다
-      splitNow(e, now, bossExtra());
-    }
-  }
-  function bossIaiRelease(now) {
-    bossFx.done = true;
-    for (const h of halves) if (h.boss && !h.released) { h.released = true; h.whiteEnd = h.hold + 60; splatAt(h); }
-    inkBurst(bossFx.x, bossFx.y, 40, 520, null, 0, GOLD); inkBurst(bossFx.x, bossFx.y, 30, 380, null, 0, null);
-    s.shake = Math.max(s.shake, 26); flash = Math.max(flash, 0.18);
-  }
+  // 대장군 발도(판 비우기, 2026-11-07)는 v2 에서 규칙이 빠졌다(보스를 살려 두고 기다리는 쪽이 이기던 원인). 대신 광란(frenzy): 몇 초 동안 점수 ×2.
+  // 화면은 가장자리 옅은 금빛 테두리 + HUD 의 ×2 와 남은 시간 막대만(사용자는 정신없는 화면에 민감)
+  let frenzy = null, perkPop = null, lvAt = 0;
+  const frenzyLeft = (now) => { // 남은 초: game.js 의 s.frenzyT 를 믿고, 없으면 사건에서 받은 길이로 센다
+    if (typeof s.frenzyT === "number") return Math.max(0, s.frenzyT);
+    return frenzy ? Math.max(0, frenzy.dur - (now - frenzy.born) / 1000) : 0;
+  };
   function scanCuts(now) { for (const e of s.enemies) if (e.alive && e.dying > 0 && !cutSeen.has(e)) splitNow(e, now); }
   // 그 판에서 그은 본 일섬을 기억해 둔다(20초 끝맺음 때 남은 적이 이 선들을 따라 갈라진다)
   let strokes = [], endFx = null;
@@ -292,47 +301,46 @@
   // ---------- 사건 ----------
   function handleEvents(now) {
     for (const ev of s.events) {
-      if (ev.type === "dash") { if (!play(["swish"], 0.55, 1.15)) whoosh(0.12, 3800, 1200, 0.14); }
+      if (ev.type === "dash") { dashNotes = 0; if (!play(["swish"], 0.55, 1.15)) whoosh(0.12, 3800, 1200, 0.14); }
       else if (ev.type === "hit") {
-        // 한 프레임에 여럿을 베도 소리는 겹겹이 쌓이지 않게 30ms 간격을 둔다. 연쇄가 길수록 칼 울림이 조금씩 높아진다
-        // 발도: 지나가며 베는 순간은 가볍게 '슥', 진짜 '촥'은 일섬이 끝난 뒤 한꺼번에(iaiRelease)
-        if (now - lastCut > 30) { lastCut = now; if (!play(["cut_a", "cut_b"], 0.3, 1.5 + Math.min(s.chain, 20) * 0.012)) chwak(0.25, 4200); }
+        // 맞은 그 프레임에 '촥'(2026-11-09 v2). 음높이 = 연쇄 음계 칸, 한 일섬 안에서 더 벨수록 한 칸씩 위로(아르페지오, 동시 6개까지)
+        cutNotes(Math.max(1, ev.count || 1), Math.min(CHAIN_TOP, chainOfHit(ev) - 1));
       } else if (ev.type === "split") {
         // 그림은 적중 프레임에 scanCuts 가 이미 시작했다. 한 프레임 안에 베이고 사라진 경우만 여기서 대신 가른다
-        if (!halves.some((h) => h.x === ev.x && h.y === ev.y)) splitNow({ type: ev.kind, x: ev.x, y: ev.y, cut: ev.cut, face: ev.face, r: ev.r }, now, bossFx && bossFx.born === now ? bossExtra(ev) : undefined);
+        if (!halves.some((h) => h.x === ev.x && h.y === ev.y)) splitNow({ type: ev.kind, x: ev.x, y: ev.y, cut: ev.cut, face: ev.face, r: ev.r }, now);
       } else if (ev.type === "bounce") { // 벽 반사: 벽 쪽에서 안쪽으로 먹이 튀고 살짝 흔들린다(소리 자리: R3)
         const b = Arena.bounds(s), P = CFG.pad, dl = [ev.x - (b.x0 + P), (b.x1 - P) - ev.x, ev.y - (b.y0 + P), (b.y1 - P) - ev.y], wi = dl.indexOf(Math.min(...dl));
         const nA = [0, Math.PI, Math.PI / 2, -Math.PI / 2][wi];
         inkBurst(ev.x, ev.y, 10 + stage(s.lv) * 4, 240, nA, 1.5, null); inkBurst(ev.x, ev.y, 4, 120, nA, 2.6, stage(s.lv) >= 2 ? GOLD : null);
         s.shake = Math.max(s.shake, 2);
         play(["ricochet"], 0.6, 1 + Math.min((ev.n || 1) - 1, 3) * 0.08); // 반사할수록 조금 높게
-      } else if (ev.type === "bossIai") { bossIaiStart(ev, now);
-        bossIaiSfxAt = now; play(["boss_iai_hold"], 0.5, 1); setTimeout(() => { if (!play(["boss_iai"], 1.0, 1)) chwak(0.9, 2200, 0.3); }, BOSS_IAI_SFX_MS); // 대장군 발도: 판 위 모든 적이 서 있다가 한꺼번에 갈라진다(소리 자리: R3)
-      } else if (ev.type === "dashEnd") { if (ev.hits) { for (const h of halves) if (h.deferred) h.ready = true; iaiAt = now + IAI_BEAT; } }
-      else if (ev.type === "miss") { if (!play(["cloth2", "cloth4"], 0.4, 1.1)) whoosh(0.22, 1500, 300, 0.12); }
-      else if (ev.type === "hurt") { if (!play(["hurt"], 0.55)) tone(110, 0.3, "sawtooth", 0.12); pops.push({ str: "LV↓ " + ev.lv, x: s.p.x, y: s.p.y - 30, born: now, col: RED, size: 20 }); }
+      } else if (ev.type === "frenzy") { // 광란(보스 처치 뒤): 몇 초 점수 ×2. 시작음은 보스 처치음 뒤에 살짝 늦게
+        frenzy = { born: now, dur: ev.dur || 4 }; setTimeout(frenzySfx, 180);
+      } else if (ev.type === "dashEnd") { if (ev.hits) noteChain = ev.chain || s.chain || 1; }
+      else if (ev.type === "miss") { if (!play(["cloth2", "cloth4"], 0.4, 1.1)) whoosh(0.22, 1500, 300, 0.12); if (noteChain > 0) chainBreakSfx(); noteChain = 0; } // 빗나가 연쇄가 끊기면 '툭', 음은 바닥으로
+      else if (ev.type === "hurt") { noteChain = 0; if (!play(["hurt"], 0.55)) tone(110, 0.3, "sawtooth", 0.12); pops.push({ str: "LV↓ " + ev.lv, x: s.p.x, y: s.p.y - 30, born: now, col: RED, size: 20 }); }
       else if (ev.type === "multi" && ev.hits > 1) {
         // 2026-11-07 정리: 3명 이상일 때만, 한 번에 하나만(새 글자가 이전 글자를 지운다), 크기 상한 낮춤
         if (ev.hits >= 3) { pops = pops.filter((q) => !q.cut); pops.push({ cut: true, str: ev.hits + " CUT  +" + ev.pts + (ev.mult > 1.001 ? "  ×" + ev.mult.toFixed(1) : ""), x: ev.x, y: ev.y - 30, born: now, col: ev.hits >= 5 ? GOLD : ACC, size: ev.hits >= 5 ? Math.min(32, 18 + ev.hits) : 16 }); }
         if (ev.hits >= 5 && !play(["multi"], 0.5 + Math.min(ev.hits - 5, 5) * 0.04, 1 + Math.min(ev.hits - 5, 5) * 0.03)) { tone(659, 0.12); setTimeout(() => tone(988, 0.2), 60); }
       }
-      else if (ev.type === "banner") { pops.push({ str: "+" + ev.xp + " XP", x: ev.x, y: ev.y - 30, born: now, col: GOLD }); if (!play(["banner"], 0.7)) { tone(784, 0.12); setTimeout(() => tone(1047, 0.2), 60); } }
+      else if (ev.type === "banner") { /* 2026-11-09 정보량 정리: "+N XP" 글자는 없앴다. 소리만 */ if (!play(["banner"], 0.6)) { tone(784, 0.12); setTimeout(() => tone(1047, 0.2), 60); } }
       else if (ev.type === "widen") { noise(0.5, 200, 0.25); tone(196, 0.5, "sine", 0.12); }
       else if (ev.type === "strike") { if (!play(["chop_short"], 0.85, 0.95)) chwak(0.6, 1800, 0.16); inkBurst(ev.x, ev.y, 8, 260, ev.ang, 1.2, null); }
-      else if (ev.type === "elite") { pops.push({ str: "+" + ev.score, x: ev.x, y: ev.y - 40, born: now, col: INK, size: 26 }); if (!play(["elite_down"], 0.6)) tone(392, 0.2, "square", 0.08); }
+      else if (ev.type === "elite") { /* 점수 글자는 3명 이상 베기만 남긴다(2026-11-09) */ if (!play(["elite_down"], 0.6)) tone(392, 0.2, "square", 0.08); }
       else if (ev.type === "bossWarn") { bossWarn = { side: ev.side, born: now }; if (!play(["boss_warn"], 0.8)) { tone(110, 1.0, "sawtooth", 0.1); setTimeout(() => tone(147, 0.9, "sawtooth", 0.1), 350); } }
-      else if (ev.type === "bossdown") { if (bossFx && bossFx.born === now) bossFx.pts = ev.score; else pops.push({ str: "+" + fmt(ev.score), x: ev.x, y: ev.y - 70, born: now, col: GOLD, size: 54 }); flash = 0.3; /* 발도가 있으면 처치 총점을 화면 가운데 ISSEN 점수로(bossFx) */ if (bossIaiSfxAt === now) {} /* 발도 소리가 대신한다 */ else if (!play(["boss_down"], 0.9)) { tone(523, 0.3); setTimeout(() => tone(659, 0.3), 90); setTimeout(() => tone(784, 0.3), 180); setTimeout(() => tone(1047, 0.6), 270); noise(0.6, 400, 0.4); } }
+      else if (ev.type === "bossdown") { pops.push({ str: "+" + fmt(ev.score), x: ev.x, y: ev.y - 70, born: now, col: GOLD, size: 40 }); flash = 0.15; if (!play(["boss_down"], 0.9)) { tone(523, 0.3); setTimeout(() => tone(659, 0.3), 90); setTimeout(() => tone(784, 0.3), 180); setTimeout(() => tone(1047, 0.6), 270); noise(0.6, 400, 0.4); } }
       else if (ev.type === "red") { if (!play(["red_death"], 0.9)) { tone(90, 0.6, "sawtooth", 0.18); noise(0.4, 300, 0.4); } flash = 0.2; }
       else if (ev.type === "dodge") { noise(0.05, 4000, 0.06); }
       else if (ev.type === "level") {
-        if (ev.perk ? play(["perk"], 0.85, 1) : play(["levelup"], 0.8, 1 + Math.min(ev.lv, 8) * 0.015)) {} /* 새 능력이면 도장 소리가 레벨업 소리를 대신한다 */ else { tone(523, 0.15); setTimeout(() => tone(659, 0.15), 70); setTimeout(() => tone(784, 0.25), 140); }
-        if (ev.perk) perkPop = { name: ev.perk.name, n: ev.perk.n, lv: ev.lv, born: now }; // 새 능력: 화면 가운데 먹 도장(이때는 LV 글자 대신)
-        else lvPop = { lv: ev.lv, born: now };
-        flash = 0.25;
+        // 2026-11-09 정보량 정리: 화면 가운데 큰 LV 글자와 흰 번쩍임을 없앴다. 왼쪽 아래 HUD 의 LV 줄이 잠깐 밝아지고 짧은 소리만. 새 능력(BOUNCE, LV3 한 번)은 도장 유지
+        if (ev.perk ? play(["perk"], 0.85, 1) : play(["levelup"], 0.5, 1 + Math.min(ev.lv, 8) * 0.015)) {} /* 새 능력이면 도장 소리가 레벨업 소리를 대신한다 */ else { tone(523, 0.1, "triangle", 0.06); setTimeout(() => tone(784, 0.16, "triangle", 0.06), 60); }
+        if (ev.perk) { perkPop = { name: ev.perk.name, n: ev.perk.n, lv: ev.lv, born: now }; flash = 0.12; }
+        lvAt = now;
       } else if (ev.type === "bufferCancel") { // 예약해 둔 일섬이 붉은 것 때문에 취소됨
         pops.push({ str: "CANCEL", x: s.p.x, y: s.p.y - 26, born: now, col: RED, size: 13 }); play(["tick"], 0.35);
       } else if (ev.type === "end") {
-        iaiRelease(now, true); iaiAt = 0; endAt = now; resultAt = 0; heldAtEnd = pointerHeld; copied = 0; startEndFx(now); if (ev.kind !== "red") play(["gong_end"], 0.9, 1.06); // 붉은 죽음은 red_death 가 이미 울렸다
+        endAt = now; resultAt = 0; heldAtEnd = pointerHeld; copied = 0; startEndFx(now); if (ev.kind !== "red") play(["gong_end"], 0.9, 1.06); // 붉은 죽음은 red_death 가 이미 울렸다
         recordResult(s.result);
       }
     }
@@ -493,8 +501,7 @@
   function draw(now, dt) {
     const p = s.p, tr = tier(s.lv);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1;
-    noteStrokes(); scanCuts(now); if (iaiAt && now >= iaiAt) { iaiAt = 0; iaiRelease(now); }
-    if (bossFx && !bossFx.done && now >= bossFx.at) bossIaiRelease(now);
+    noteStrokes(); scanCuts(now);
     // 끝맺음 진행: time 은 0.3초 멈칫(살짝 당겨 들어감) 뒤 일제히 가른다
     const ef = endFx, et = ef ? now - ef.born : 0;
     if (ef && ef.kind !== "red" && !ef.done && et >= END_CUT) endCut(now);
@@ -535,7 +542,7 @@
     halves = halves.filter((h) => now - h.born < (h.life || 600) + (h.hold ?? HIT_HOLD));
     for (const h of halves) {
       const hold = h.hold ?? HIT_HOLD, el = now - h.born, life = h.life || 600, k = Math.max(0, el - hold) / life, nx = -Math.sin(h.cut), ny = Math.cos(h.cut);
-      const ek = 1 - Math.pow(1 - Math.min(1, k * 1.6), 3), off = (el < hold ? 0 : 3) + ek * 26, white = el < Math.min(hold, HIT_HOLD) || (h.whiteEnd && el > hold && el < h.whiteEnd);
+      const ek = 1 - Math.pow(1 - Math.min(1, k * 1.6), 3), off = (el < hold ? 0 : 3) + ek * 26, white = el < Math.min(hold, HIT_HOLD);
       const fade = Math.max(0, 1 - Math.pow(k, 1.5));
       for (const sg of [1, -1]) {
         if (ok(h.kind)) { // 그림을 벤 선을 따라 반으로 잘라 양쪽으로 벌린다
@@ -636,6 +643,11 @@
 
     if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 2})`; ctx.fillRect(0, 0, W, H); flash -= dt; }
     if (ef && ef.kind === "red") { const ra = et < 90 ? 0.3 : 0.3 - 0.2 * Math.min(1, (et - 90) / 400); ctx.fillStyle = `rgba(200,36,27,${ra})`; ctx.fillRect(0, 0, W, H); } // 붉은 유닛을 벤 순간 화면이 붉게 멈칫
+    const fzL = s.state === "play" ? frenzyLeft(now) : 0, fzD = (frenzy && frenzy.dur) || 4;
+    if (fzL > 0) { // 광란: 화면 가장자리 옅은 금빛 테두리. 깜빡이지 않고, 켜질 때 0.25초·끝나기 전 0.5초에 걸쳐 스민다
+      const fa = 0.34 * Math.min(1, (fzD - fzL) / 0.25 + 0.2, fzL / 0.5);
+      for (let i = 0; i < 4; i++) { ctx.strokeStyle = `rgba(224,164,18,${fa * (1 - i * 0.26)})`; ctx.lineWidth = 7; ctx.strokeRect(3.5 + i * 7, 3.5 + i * 7, W - 7 - i * 14, H - 7 - i * 14); }
+    }
 
     // HUD
     const boss = s.enemies.find((e) => e.type === "boss" && e.alive);
@@ -659,6 +671,12 @@
       ctx.globalAlpha = 0.16 * (1 - f * 0.6); text(String(n), W / 2, H / 2 + 80, 240 - f * 30, left <= 1 ? RED : INK); ctx.globalAlpha = 1;
     }
     text(fmt(s.score), 26, 50, 30, INK, "left");
+    if (fzL > 0) { // 광란 HUD: 점수 옆 금색 ×2 와 그 밑 남은 시간 막대
+      ctx.font = "30px serif"; const fx = 26 + ctx.measureText(fmt(s.score)).width + 12;
+      text("×2", fx, 48, 22, GOLD, "left");
+      ctx.fillStyle = "rgba(224,164,18,0.25)"; ctx.fillRect(fx, 54, 30, 3);
+      ctx.fillStyle = GOLD; ctx.fillRect(fx, 54, 30 * Math.min(1, fzL / fzD), 3);
+    }
     const hb = mode === "daily" ? dayBest : best;
     if (hb > 0) text((mode === "daily" ? "TODAY BEST " : "BEST ") + fmt(hb), 28, 68, 12, s.score > hb ? GOLD : "rgba(29,26,23,0.55)", "left");
     const pd = paceDelta();
@@ -679,11 +697,8 @@
     const L = CFG.levels, lo = L[s.lv - 1], hi = L[s.lv] ?? lo, k = hi > lo ? (s.xp - lo) / (hi - lo) : 1;
     ctx.fillStyle = "rgba(29,26,23,0.12)"; ctx.fillRect(20, H - 14, W - 40, 5);
     ctx.fillStyle = tr >= 3 ? GOLD : ACC; ctx.fillRect(20, H - 14, (W - 40) * k, 5);
-    text("LV " + s.lv, 26, H - 22, 16, INK, "left");
-    if (lvPop && now - lvPop.born < 800) {
-      const q = (now - lvPop.born) / 800;
-      ctx.globalAlpha = 1 - q; text("LV " + lvPop.lv, W / 2, H / 2 - 60 - q * 30, 40 + q * 20, lvPop.lv >= 7 ? GOLD : ACC); ctx.globalAlpha = 1;
-    }
+    const lq = lvAt ? Math.max(0, 1 - (now - lvAt) / 600) : 0; // 레벨업: HUD 의 LV 줄만 잠깐 커지고 물든다(화면 가운데 큰 글자 대신, 2026-11-09)
+    text("LV " + s.lv, 26, H - 22, 16 + lq * 4, lq > 0 ? (tr >= 3 ? GOLD : ACC) : INK, "left");
     if (perkPop && now - perkPop.born < 900) { // 새 능력 알림: 먹 도장이 찍히듯 커졌다 줄며 앉고, 반투명이라 아래 싸움이 비친다
       const el = now - perkPop.born, inK = Math.min(1, el / 110), q = el / 900, al = 0.62 * inK * (q < 0.6 ? 1 : 1 - (q - 0.6) / 0.4), sc = 1.35 - 0.35 * inK;
       ctx.save(); ctx.globalAlpha = al; ctx.translate(W / 2, H / 2 - 70); ctx.rotate(-0.05); ctx.scale(sc, sc);
@@ -691,13 +706,6 @@
       ctx.strokeStyle = PAPER; ctx.lineWidth = 2; ctx.strokeRect(-163, -41, 326, 82);
       text(perkPop.name + (perkPop.n > 1 ? " ×" + perkPop.n : ""), 0, 12, 48, PAPER); text("hit a wall to bounce", 0, 34, 15, PAPER); // 2026-11-09: 반사는 LV3 한 번, SHORT 이동은 벽에 닿을 때만 반사
       ctx.restore();
-    }
-    if (bossFx && now >= bossFx.at && now - bossFx.at < 1700) { // 대장군 발도 점수: 갈라지는 순간 화면 가운데 크게
-      const t = now - bossFx.at, sc = 1 + 0.45 * Math.max(0, 1 - t / 160), al = t < 1250 ? 1 : 1 - (t - 1250) / 450;
-      ctx.globalAlpha = al;
-      text("ISSEN  +" + fmt(bossFx.pts), W / 2, H / 2 - 4, 66 * sc, GOLD);
-      text(bossFx.hits + " CUT" + (bossFx.mult > 1.001 ? "   ×" + bossFx.mult.toFixed(1) : ""), W / 2, H / 2 + 34, 26, INK);
-      ctx.globalAlpha = 1;
     }
     if (!s.started) { const a = 0.5 + 0.5 * Math.sin(now / 250); text("click", p.x, p.y + 44, 16, `rgba(29,26,23,${a})`); }
 
@@ -726,6 +734,7 @@
     line(rx - 44, ry + 44, rx + 44, ry - 44, RED, 4); // 금지 사선
     const hb = mode === "daily" ? dayBest : best;
     text((mode === "daily" ? "DAILY " + seed : "RANDOM") + "   ·   T to switch" + (hb > 0 ? "   ·   best " + fmt(hb) : ""), W / 2, 418, 14, "rgba(29,26,23,0.6)");
+    text("V  slash: " + (instant ? "INSTANT" : "DASH"), W / 2, 438, 12, "rgba(29,26,23,0.45)"); // 일섬 속도 A/B(2026-11-09). 기록은 따로 저장
     const a = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now / 260));
     text("Click to start", W / 2, 470, 22, `rgba(29,26,23,${a})`);
     text("Contains flashing lights.", W / 2, H - 18, 13, "rgba(29,26,23,0.55)"); // 잼 필수 번쩍임 경고. 2026-11-09 AI 초안, 문구는 사용자 확정 전
@@ -769,6 +778,7 @@
     // 재시작 안내: 클릭은 1.2초 뒤부터
     const clickOk = t > 1.2 && !heldAtEnd;
     text("R / Space  retry" + (clickOk ? "   ·   click  retry" : "") + "   ·   T  next run: " + (mode === "daily" ? "DAILY" : "RANDOM"), W / 2, 456, 15, "rgba(29,26,23,0.6)");
+    text("V  slash: " + (instant ? "INSTANT" : "DASH") + (r.instant !== undefined && r.instant !== instant ? "  (next run)" : ""), W / 2, 478, 12, "rgba(29,26,23,0.45)");
     ctx.restore();
     // 결과 화면에서는 시스템 커서 대신 작은 점
     circle(mouse.x, mouse.y, 4, INK);

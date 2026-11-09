@@ -5,7 +5,9 @@ const { CFG } = A;
 let fails = 0;
 const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) fails++; };
 const run = (s, sec) => { for (let i = 0; i < sec * 60; i++) A.update(s, 1 / 60); };
-function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.length = 0; s.redT = 99; s.firstRedPending = false; s.started = true; s.spawnT = 99; return s; }
+// 빈 판: 보충·대장군·붉은 것 없음. instant는 기본 true(게임 기본값). 돌진 도중을 봐야 하는 옛 테스트는 blank(false)
+function blank(instant = true) { const s = A.createGame(1, { instant }); s.enemies.length = 0; s.reds.length = 0; s.redT = 99; s.firstRedPending = false; s.started = true; s.spawnT = 99; s.refill = false; s.bossState = 2; return s; }
+const B = CFG.scoreBase;
 
 // 1. 화면 끝까지 간다
 {
@@ -22,7 +24,7 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
 {
   const s = blank(); for (let i = 0; i < 5; i++) A.add(s, "soldier", 560 + i * 60, 270);
   A.slash(s, 900, 270); run(s, 0.8);
-  ok(s.kills === 5 && s.xp === 15 && s.score === 25, `다섯 명을 한 번에 꿰면 경험치 15, 점수 25(레벨 ${s.lv})`);
+  ok(s.kills === 5 && s.xp === 15 && s.score === 5 * B, `다섯 명을 한 번에 꿰면 경험치 15, 점수 5×${B}=${s.score}(선형, 레벨 ${s.lv})`);
 }
 // 4. 맞으면 한 레벨 내려간다
 {
@@ -31,9 +33,9 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
 }
 // 5. 클릭 미리 입력: 일섬 중 클릭은 끝나자마자 나간다
 {
-  const s = blank(); A.add(s, "soldier", 700, 270); A.add(s, "soldier", 800, 100);
-  A.slash(s, 900, 270); A.update(s, 1 / 60); A.slash(s, 800, 100); run(s, 0.6);
-  ok(s.kills === 2, "일섬 도중 누른 클릭이 이어서 나감");
+  const s = blank(false); A.add(s, "soldier", 700, 270); A.add(s, "soldier", 800, 100);
+  A.slash(s, 900, 270); A.update(s, 1 / 60); const buffered = !!s.buffer; A.slash(s, 800, 100); run(s, 0.6);
+  ok(!buffered && s.kills === 2, "일섬 도중 누른 클릭이 이어서 나감(instant off)");
 }
 // 6. 산개병: 조준선이 오래 머물면 비킨다
 {
@@ -56,7 +58,7 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
 }
 // 7b. 튕긴 구간은 붉은 것을 통과하고, 거기서 벤 적도 같은 일섬의 꿴 수(점수 = 꿴 수² × 연쇄)
 {
-  const s = blank(); s.xp = CFG.levels[2]; s.lv = 3;
+  const s = blank(false); s.xp = CFG.levels[2]; s.lv = 3;
   A.add(s, "soldier", 700, 270); A.add(s, "soldier", 200, 270); // 첫 구간(→오른쪽)에 하나, 튕긴 구간(←왼쪽)에 하나
   s.reds.push({ x: 300, y: 270, vx: 0, vy: 0, r: CFG.red.r, life: 99 });
   const pl = A.plan(s, 900, 270);
@@ -64,7 +66,7 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
   const evs = []; A.slash(s, 900, 270); let stopX = null; for (let i = 0; i < 60 && (s.dash || s.waves.length); i++) { A.update(s, 1 / 60); evs.push(...s.events); s.events.length = 0; if (!s.dash && stopX === null) stopX = s.p.x; }
   ok(Math.abs(s.p.x - (A.W - CFG.pad)) < 1 && Math.abs(stopX - s.p.x) < 1e-6, `몸은 조준한 벽에서 멈추고 검기만 튕긴다(멈춘 x ${s.p.x.toFixed(0)})`);
   const m = evs.find((e) => e.type === "multi"), bo = evs.filter((e) => e.type === "bounce");
-  ok(s.state === "play" && m && m.hits === 2 && m.pts === 4 && s.score === 4, `튕긴 구간은 붉은 것을 통과, 두 구간 처치가 한 일섬 2꿰기 = ${m && m.pts}점`);
+  ok(s.state === "play" && m && m.hits === 2 && m.pts === 2 * B && s.score === 2 * B, `튕긴 구간은 붉은 것을 통과, 두 구간 처치가 한 일섬 2꿰기 = ${m && m.pts}점`);
   ok(bo.length === 1 && bo[0].n === 1 && Math.abs(bo[0].x - (A.W - CFG.pad)) < 1 && evs.filter((e) => e.type === "dashEnd").length === 1, "벽에서 bounce 이벤트(n=1) 한 번, multi·dashEnd는 일섬 끝에 한 번");
   ok(s.slashes.filter((q) => q.kind === "main").map((q) => q.bounce).join() === "0,1", "s.slashes에 구간마다 하나(bounce 0, 1)");
   const s2 = blank(); s2.xp = CFG.levels[2]; s2.lv = 3; s2.reds.push({ x: 700, y: 270, vx: 0, vy: 0, r: CFG.red.r, life: 99 });
@@ -80,15 +82,24 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
   const perks = lvs.filter((e) => e.perk);
   ok(lvs.length >= 9 && perks.length === 1 && perks[0].lv === 3 && !lvs.some((e) => (e.lv === 6 || e.lv === 9) && e.perk), `레벨업 ${lvs.length}번 중 perk는 LV${perks.map((e) => e.lv).join(",")}만(LV6·9 없음)`);
 }
-// 7c. 한 번 긋는 최대 시간: 가장 넓은 판(줌 0.55) 모서리에서 대각선, LV11 반사(2026-11-09부터 1번)여도 0.45초 이하
+// 7c. 한 번 긋는 최대 시간: 판 모서리에서 대각선, LV11 반사 1번. instant off(옛 속도)여도 0.45초 이하. 줌은 고정 1
 {
   let worst = 0;
   for (const [tx, ty] of [[1, 1], [1, 0.5], [1, 0.2], [0.3, 1]]) {
-    const s = blank(); s.lv = s.maxLv = 11; s.xp = CFG.levels[10]; s.zoomTarget = s.zoom = 0.55; const b = A.bounds(s);
-    s.p.x = b.x0 + CFG.pad + 1; s.p.y = b.y0 + CFG.pad + 1; A.slash(s, s.p.x + tx * 100, s.p.y + ty * 100);
+    const s = blank(false); s.lv = s.maxLv = 11; s.xp = CFG.levels[10];
+    s.p.x = CFG.pad + 1; s.p.y = CFG.pad + 1; A.slash(s, s.p.x + tx * 100, s.p.y + ty * 100);
     let t = 0; while ((s.dash || s.waves.length) && t < 2) { A.update(s, 1 / 240); t += 1 / 240; } worst = Math.max(worst, t);
   }
-  ok(worst <= 0.45, `LV11·최대 판 반사 일섬 최장 ${worst.toFixed(3)}초 <= 0.45`);
+  ok(worst <= 0.45, `LV11 반사 일섬(instant off) 최장 ${worst.toFixed(3)}초 <= 0.45`);
+}
+// 7e. 줌 고정(2026-11-09 v2): 레벨이 올라도 판이 넓어지지 않고 widen 이벤트가 없다
+{
+  const s = blank(), evs = [];
+  ok(CFG.zoomByLv.every((z) => z === 1), "zoomByLv 전부 1");
+  for (let lv = 2; lv <= CFG.levels.length; lv++) { s.xp = CFG.levels[lv - 1] - 1; s.lv = lv - 1; A.add(s, "soldier", s.p.x + 200, s.p.y); A.slash(s, s.p.x + 300, s.p.y);
+    for (let i = 0; i < 30 && (s.dash || s.waves.length); i++) { A.update(s, 1 / 60); evs.push(...s.events); s.events.length = 0; } s.p.x = 300; s.p.y = 270; }
+  const b = A.bounds(s);
+  ok(s.maxLv === CFG.levels.length && !evs.some((e) => e.type === "widen") && b.w === A.W && b.h === A.H && s.zoomTarget === 1, `LV${s.maxLv}까지 올려도 판 ${b.w}x${b.h}, widen 없음`);
 }
 // 7d. 연쇄 배율(2026-11-09 사용자 승인): 단계 0.25, 상한 6(연쇄 21번째에 도달), 창 0.8초
 {
@@ -99,15 +110,42 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
     for (let f = 0; f < 30 && s.dash; f++) { A.update(s, 1 / 60); for (const e of s.events) if (e.type === "multi") mults.push(e.mult); s.events.length = 0; }
   }
   ok(mults.length === 24 && mults[0] === 1 && mults[3] === 1.75 && mults[19] === 5.75 && mults[20] === 6 && mults[23] === 6, `연쇄 배율 1→${mults[3]}(4번째)→${mults[19]}(20번째)→${mults[20]}(21번째)→${mults[23]}(24번째, 상한)`);
-  ok(s.score === Math.round(mults.reduce((a, m) => a + Math.round(m), 0)) && s.chain === 24, `한 명씩 24번 이어 베기 = ${s.score}점(상한 3이던 때는 ${[...Array(24)].reduce((a, _, i) => a + Math.round(Math.min(3, 1 + 0.25 * i)), 0)}점)`);
+  ok(s.score === mults.reduce((a, m) => a + Math.round(m * B), 0) && s.chain === 24, `한 명씩 24번 이어 베기 = ${s.score}점(한 번 = ${B} × 배율)`);
 }
-// 8. 대열이 매번 다르게 섞인다
+// 8. 보충 공급(2026-11-09 v2): 판 위(+예고 중) 적 수를 막마다 목표 n으로 유지. 시간표 대열 없음
 {
-  const s = A.createGame(3); s.t = 10; const kinds = new Set();
-  for (let i = 0; i < 40; i++) { s.enemies.length = 0; kinds.add(A.spawnWave(s)); }
-  ok(kinds.size >= 5, "대열 종류 " + [...kinds].join(","));
+  const acts = CFG.refill.acts;
+  ok(acts.map((a) => a.t + ":" + a.n).join() === "0:14,7:20,14:26", "목표 밀도 3막 " + acts.map((a) => `${a.t}초~ ${a.n}명`).join(", "));
+  // 빠르게 베는 봇으로 한 판: 매 프레임 끝에서 판 위 수가 목표보다 모자라지 않다(주자가 화면을 빠져나간 프레임만 1명 차이 허용)
+  const s = A.createGame(21, { chop: true }); s.firstRedPending = false; s.redT = 1e9;
+  let think = 0, worst = 0, seenN = new Set(), kills0 = 0;
+  A.slash(s, s.p.x + 200, s.p.y);
+  while (s.state === "play") {
+    think -= 1 / 60;
+    if (think <= 0 && !s.dash) { think = 0.15; let best = null;
+      for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2, pl = A.plan(s, s.p.x + Math.cos(a) * 300, s.p.y + Math.sin(a) * 300); if (pl && (!best || pl.cut.length > best.n)) best = { n: pl.cut.length, a }; }
+      if (best) A.slash(s, s.p.x + Math.cos(best.a) * 300, s.p.y + Math.sin(best.a) * 300); }
+    A.update(s, 1 / 60); s.events.length = 0;
+    if (s.state === "play") { worst = Math.min(worst, A.boardCount(s) - s.targetN); seenN.add(s.targetN); }
+  }
+  ok(worst >= -1 && [...seenN].join() === "14,20,26" && s.kills > 150, `한 판 내내 판 위 적 수 >= 목표-1(최저 차 ${worst}), 목표 ${[...seenN].join("→")}, 처치 ${s.kills}`);
+  // 처치하면 바로 채운다: 줄 하나를 베면 같은 프레임 안에 목표 수로 돌아온다
+  const s2 = A.createGame(5, { chop: true }); s2.enemies.length = 0; s2.started = true; s2.firstRedPending = false; s2.redT = 1e9;
+  A.update(s2, 1 / 60); const n0 = A.boardCount(s2);
+  for (let i = 0; i < 5; i++) A.add(s2, "soldier", 560 + i * 60, 270); // 목표 위에 5명 더(줄)
+  s2.p.x = 480; s2.p.y = 270; A.slash(s2, 900, 270); A.update(s2, 1 / 60);
+  ok(n0 === CFG.refill.acts[0].n && A.boardCount(s2) >= CFG.refill.acts[0].n && s2.kills >= 5, `빈 판 첫 프레임에 ${n0}명 채움, 5명 벤 프레임 뒤에도 ${A.boardCount(s2)}명`);
+  // 플레이어에게서 먼 곳: 기록된 보충 자리는 모두 minDist 이상
+  const far = s.refillLog.map((l) => l.dist), kinds = new Set(s.refillLog.map((l) => l.at));
+  ok(far.every((d) => d >= CFG.refill.minDist - 1e-6) && kinds.has("edge") && kinds.has("drop"), `보충 ${s.refillLog.length}무리 모두 플레이어에게서 ${CFG.refill.minDist}px 이상(최소 ${Math.min(...far).toFixed(0)}), 가장자리·먹물 예고 둘 다 사용`);
+  // 1막은 졸병만, 2막부터 정예·주자·산개병이 섞일 수 있다
+  const a0 = s.refillLog.filter((l) => l.act === 0), a12 = s.refillLog.filter((l) => l.act > 0);
+  ok(a0.every((l) => l.kind === "soldier" && !l.elite) && a12.some((l) => l.elite), `1막 보충은 졸병만(${a0.length}무리), 2막 이후 정예 섞임(${a12.filter((l) => l.elite).length}/${a12.length}무리)`);
+  // 붉은 것 목표 수도 막마다
+  const s3 = A.createGame(8, { chop: true }); s3.p.invuln = 1e9; A.slash(s3, s3.p.x + 200, s3.p.y); const mx = [0, 0, 0];
+  while (s3.state === "play") { A.update(s3, 1 / 60); s3.p.invuln = 1e9; const i = s3.t < 7 ? 0 : s3.t < 14 ? 1 : 2; mx[i] = Math.max(mx[i], s3.reds.length); }
+  ok(mx.join() === CFG.refill.acts.map((a) => a.red).join(), `붉은 것 막별 최대 ${mx.join("/")} (목표 ${CFG.refill.acts.map((a) => a.red).join("/")})`);
 }
-
 // 9. 붉은 것: 일섬이 베면 즉시 끝, 미리보기에 표시
 {
   const s = blank(); s.reds.push({ x: 700, y: 270, vx: 0, vy: 0, r: CFG.red.r, life: 99 });
@@ -132,52 +170,59 @@ function blank() { const s = A.createGame(1); s.enemies.length = 0; s.reds.lengt
   A.slash(s, 100, 270); run(s, 0.6); A.slash(s, 900, 270); run(s, 0.6);
   ok(!e.alive || e.dying > 0, "엘리트 세 번째에 쓰러짐, 점수 " + s.score);
 }
-// 12. 대장군: 정해진 때 한 번 나오고, 체력만 많다(기믹 없음)
+// 12. 대장군: 정해진 때 한 번 나오고, 체력만 많다(기믹 없음). 처치 보너스 = bonus × 기본점 × 그 일섬의 연쇄 배율
 {
-  const s = A.createGame(5); s.started = true; s.reds.length = 0; s.redT = 999; s.firstRedPending = false;
+  const s = A.createGame(5); s.started = true; s.reds.length = 0; s.redT = 999; s.firstRedPending = false; s.p.invuln = 99;
   run(s, CFG.boss.at + 0.1);
   const boss = s.enemies.find((e) => e.type === "boss");
-  ok(boss && boss.hp === CFG.boss.hp && s.enemies.filter((e) => e.type === "boss").length === 1, "대장군 한 번 등장(체력 " + (boss && boss.hp) + ")");
-  boss.hp = 1; boss.x = 600; boss.y = 270; s.p.x = 450; s.p.y = 270; s.p.invuln = 9; s.chain = 0; s.events.length = 0;
-  const sc = s.score; A.slash(s, 900, 270); run(s, 1.2);
-  const bd = s.events.find((e) => e.type === "bossdown");
-  ok(!boss.alive && bd && bd.base === CFG.boss.score && bd.mult === 1, `대장군 처치 기본점 ${bd && bd.base}(연쇄 없음: 배율 1), 발도 포함 +${bd && bd.score}`);
-  // 연쇄 중 처치하면 그 순간 배율을 곱한 값이 이벤트 점수이자 실제 지급값
-  const s2 = A.createGame(5); s2.started = true; s2.reds.length = 0; s2.redT = 999; s2.firstRedPending = false; s2.enemies.length = 0; s2.spawnT = 99; s2.bannerT = 99; s2.bossState = 2;
-  const b2 = A.add(s2, "boss", 600, 270); b2.hp = 1; s2.p.x = 450; s2.p.y = 270; s2.p.invuln = 9; s2.chain = 2; s2.lastHitT = s2.t;
-  const sc2 = s2.score; A.slash(s2, 900, 270); run(s2, 0.8);
-  const bd2 = s2.events.find((e) => e.type === "bossdown"), m3 = Math.min(CFG.chainMax, 1 + CFG.chainStep * 2);
-  ok(bd2 && bd2.score === Math.round(CFG.boss.score * m3) && s2.score - sc2 === bd2.score + Math.round(m3), `연쇄 3번째 일섬의 보스 처치 = ${bd2 && bd2.score}점(배율 ${m3})`);
+  ok(CFG.boss.at > 7 && CFG.boss.at < 14 && boss && boss.hp === CFG.boss.hp && CFG.boss.hp === 6 && s.enemies.filter((e) => e.type === "boss").length === 1, `대장군 ${CFG.boss.at}초(2막 끝)에 한 번 등장(체력 ${boss && boss.hp})`);
+  const s1 = blank(); const b1 = A.add(s1, "boss", 600, 270); b1.hp = 1; s1.p.x = 450; s1.p.y = 270; s1.p.invuln = 9;
+  const sc = s1.score; A.slash(s1, 900, 270); const ev1 = []; for (let i = 0; i < 30; i++) { A.update(s1, 1 / 60); ev1.push(...s1.events); s1.events.length = 0; }
+  const bd = ev1.find((e) => e.type === "bossdown");
+  ok(!b1.alive && bd && bd.base === CFG.boss.bonus * B && bd.score === bd.base && bd.mult === 1 && bd.iai === 0 && s1.score - sc === bd.score + B, `대장군 처치 보너스 ${bd && bd.score}(=${CFG.boss.bonus}×${B}, 배율 1) + 지나간 1타 ${B}`);
+  // 연쇄 3번째 일섬에서 처치: 보너스와 1타 모두 그 일섬의 배율
+  const s2 = blank(); const b2 = A.add(s2, "boss", 600, 270); b2.hp = 1; s2.p.x = 450; s2.p.y = 270; s2.p.invuln = 9; s2.chain = 2; s2.lastHitT = s2.t;
+  const sc2 = s2.score; A.slash(s2, 900, 270); const ev2 = []; for (let i = 0; i < 30; i++) { A.update(s2, 1 / 60); ev2.push(...s2.events); s2.events.length = 0; }
+  const bd2 = ev2.find((e) => e.type === "bossdown"), m3 = Math.min(CFG.chainMax, 1 + CFG.chainStep * 2);
+  ok(bd2 && bd2.mult === m3 && bd2.score === Math.round(CFG.boss.bonus * B * m3) && s2.score - sc2 === bd2.score + Math.round(B * m3), `연쇄 3번째 일섬의 보스 처치 = ${bd2 && bd2.score} + ${Math.round(B * m3)}점(배율 ${m3})`);
+  // 정예 처치 보너스도 같은 틀
+  const s3 = blank(); const e3 = A.add(s3, "elite", 700, 270); e3.hp = 1; s3.chain = 4; s3.lastHitT = s3.t; A.slash(s3, 900, 270);
+  const ev3 = []; for (let i = 0; i < 30; i++) { A.update(s3, 1 / 60); ev3.push(...s3.events); s3.events.length = 0; }
+  const el = ev3.find((e) => e.type === "elite"), m5 = Math.min(CFG.chainMax, 1 + CFG.chainStep * 4);
+  ok(el && el.score === Math.round(CFG.elite.bonus * B * m5) && s3.score === el.score + Math.round(B * m5), `정예 처치 보너스 ${el && el.score}(=${CFG.elite.bonus}×${B}×${m5}) + 1타 ${Math.round(B * m5)}`);
 }
-// 12b. 보스 발도: 쓰러뜨린 순간 판 위 살아 있는 적 전부(붉은 것 제외)를 같은 프레임에 처치, 점수 = iaiK × min(n, cap)² × 연쇄 배율
+// 12b. 보스 처치는 판을 비우지 않는다(2026-11-09 v2: 발도 삭제). 대신 bossdown과 같은 프레임에 frenzy 이벤트, s.frenzyT = 4
 {
-  const s = blank(); s.bossState = 2; s.bannerT = 99; s.p.invuln = 9;
-  const b = A.add(s, "boss", 600, 270); ok(b.hp === 6 && CFG.boss.hp === 6, "대장군 체력 6");
-  b.hp = 1; const others = [];
+  const s = blank(); s.p.invuln = 9;
+  const b = A.add(s, "boss", 600, 270); b.hp = 1; const others = [];
   for (let i = 0; i < 10; i++) others.push(A.add(s, "soldier", 100 + i * 70, 80));
   others.push(A.add(s, "elite", 800, 460)); others.push(A.add(s, "banner", 150, 460));
-  s.reds.push({ x: 480, y: 470, vx: 0, vy: 0, r: CFG.red.r, life: 99 });
-  const sc = s.score, evs = []; A.slash(s, 900, 270);
-  let frame = -1; for (let i = 0; i < 40; i++) { A.update(s, 1 / 60); if (s.events.some((e) => e.type === "bossIai")) frame = i; evs.push(...s.events); s.events.length = 0; }
-  const iai = evs.find((e) => e.type === "bossIai"), bd = evs.find((e) => e.type === "bossdown"), n = others.length;
-  const want = Math.round(CFG.boss.iaiK * Math.min(n, CFG.boss.iaiCap) ** 2 * 1);
-  ok(iai && iai.hits === n && iai.ids.length === n && others.every((o) => iai.ids.includes(o.id)) && iai.pts === want && iai.mult === 1, `발도 ${iai && iai.hits}명 처치(엘리트 체력 무시), ${iai && iai.pts}점`);
-  ok(others.every((o) => !o.alive) && evs.filter((e) => e.type === "split").length >= n && s.reds.length === 1 && s.state === "play", "발도 처치는 기존 갈라짐(split) 경로, 붉은 것은 그대로");
-  ok(bd && bd.score === CFG.boss.score + want + CFG.elite.score && s.score - sc === bd.score + 1, `bossdown.score = 기본 ${CFG.boss.score} + 발도 ${want} + 엘리트 ${CFG.elite.score} (일섬 1꿰기 1점 별도)`);
-  ok(s.xp >= CFG.boss.xp + n + CFG.elite.xp + CFG.banner.xp, "발도 처치에도 경험치 지급(xp " + s.xp + ")");
+  let frame = -1, fz = null, bdF = -1, fzT = null; const evs = []; A.slash(s, 900, 270);
+  for (let i = 0; i < 40; i++) { A.update(s, 1 / 60);
+    for (const e of s.events) { if (e.type === "bossdown") { bdF = i; fzT = s.frenzyT; } if (e.type === "frenzy") { frame = i; fz = e; } }
+    evs.push(...s.events); s.events.length = 0; }
+  ok(others.every((o) => o.alive && o.dying <= 0) && !evs.some((e) => e.type === "bossIai") && s.kills === 1, `보스 처치 뒤 다른 적 ${others.length}명 그대로, bossIai 이벤트 없음`);
+  ok(fz && fz.dur === CFG.boss.frenzy && CFG.boss.frenzy === 4 && frame === bdF && fzT === 4, `frenzy 이벤트(dur ${fz && fz.dur})가 bossdown과 같은 프레임, 그 순간 s.frenzyT = ${fzT}`);
 }
-// 12c. 발도 상한(2026-11-09 사용자 승인 40→15): 15명이 넘게 모여도 점수는 15명분. 처치는 전부
+// 12c. 광란: 4초 동안 모든 점수 ×2, 그 뒤 원래대로(실제 시간으로 만료)
 {
-  ok(CFG.boss.iaiCap === 15, "발도 점수 상한 15명");
-  const pts = (cnt) => { const s = blank(); s.bossState = 2; s.bannerT = 99; s.p.invuln = 9;
-    const b = A.add(s, "boss", 600, 270); b.hp = 1;
-    for (let i = 0; i < cnt; i++) A.add(s, "soldier", 60 + (i % 20) * 42, i < 20 ? 60 : 480);
-    A.slash(s, 900, 270); const evs = []; for (let i = 0; i < 40; i++) { A.update(s, 1 / 60); evs.push(...s.events); s.events.length = 0; }
-    return evs.find((e) => e.type === "bossIai"); };
-  const a = pts(15), b = pts(20), c = pts(40);
-  const at15 = Math.round(CFG.boss.iaiK * 15 * 15);
-  ok(a && b && c && a.pts === at15 && b.pts === at15 && c.pts === at15 && b.hits === 20 && c.hits === 40,
-    `발도 15명 ${a && a.pts}점 = 20명 ${b && b.pts}점 = 40명 ${c && c.pts}점(처치 수 ${b && b.hits}/${c && c.hits}명은 전부)`);
+  const s = blank(); s.p.invuln = 99; s.frenzyT = CFG.boss.frenzy; // 보스를 막 쓰러뜨린 상태
+  const cut = () => { s.p.x = 200; s.p.y = 270; A.add(s, "soldier", 400, 270); A.slash(s, 500, 270); let m = null;
+    for (let i = 0; i < 20 && !m; i++) { A.update(s, 1 / 60); m = s.events.find((e) => e.type === "multi"); s.events.length = 0; } return m; };
+  const wait = (sec) => { for (let i = 0; i < Math.round(sec * 60); i++) A.update(s, 1 / 60); };
+  const a = cut(); wait(1.0); const b = cut(); wait(s.frenzyT - 0.1); const fz1 = s.frenzyT;
+  const c = cut(); wait(1.0); const d = cut();
+  ok(a && a.pts === 2 * B && a.frenzy && b && b.pts === 2 * B, `광란 중 1명 = ${a && a.pts}점(평소 ${B}), 1초 뒤에도 ${b && b.pts}점`);
+  ok(fz1 > 0 && c && c.pts === 2 * B && s.frenzyT === 0 && d && d.pts === B && !d.frenzy, `만료 직전(남은 ${fz1.toFixed(2)}초) ${c && c.pts}점 → 4초 지나면 frenzyT 0, ${d && d.pts}점`);
+  const s2 = blank(); s2.frenzyT = 4; let t = 0; while (s2.frenzyT > 0 && t < 10) { A.update(s2, 1 / 60); t += 1 / 60; }
+  ok(Math.abs(t - 4) < 0.02, `광란은 실제 ${t.toFixed(2)}초 뒤 끝난다`);
+}
+// 12d. 선형 점수: 같은 연쇄 배율이면 5명 꿰기 = 1명 × 5 (n² 아님)
+{
+  const one = blank(); A.add(one, "soldier", 700, 270); one.chain = 3; one.lastHitT = 0; A.slash(one, 900, 270); run(one, 0.3);
+  const five = blank(); for (let i = 0; i < 5; i++) A.add(five, "soldier", 560 + i * 60, 270); five.chain = 3; five.lastHitT = 0; A.slash(five, 900, 270); run(five, 0.3);
+  const m4 = Math.min(CFG.chainMax, 1 + CFG.chainStep * 3);
+  ok(one.score === Math.round(B * m4) && five.score === Math.round(5 * B * m4), `연쇄 4번째: 1명 ${one.score}점, 5명 ${five.score}점(= ${B}×꿴 수×${m4})`);
 }
 // 14. 20초는 실제 20초: 적중이 잦아 히트스톱·레벨스톱이 많이 걸려도 남은 시간은 흐른다
 for (const fdt of [1 / 60, 1 / 144, 0.1]) {
@@ -197,7 +242,7 @@ for (const fdt of [1 / 60, 1 / 144, 0.1]) {
 }
 // 15. 예약 입력이 새 위치에서 붉은 것을 향하게 되면 버리고 알린다
 {
-  const s = blank(); A.slash(s, 900, 270); A.update(s, 1 / 60);
+  const s = blank(false); A.slash(s, 900, 270); A.update(s, 1 / 60);
   A.slash(s, 900, 100); // 끝(938,270)에서 보면 위쪽: 그 길에 붉은 것을 둔다
   s.reds.push({ x: 925, y: 150, vx: 0, vy: 0, r: CFG.red.r, life: 99 }); s.events.length = 0;
   const evs = []; for (let i = 0; i < 40; i++) { A.update(s, 1 / 60); evs.push(...s.events); s.events.length = 0; }
@@ -250,7 +295,7 @@ function bot(seed, aim, careless = false) {
     }
     const wasDash = !!s.dash; A.update(s, dt);
     if (s.dash || wasDash) { if (s.hitstop <= 0) dashT += dt; } if (!s.dash) { s.maxDash = Math.max(s.maxDash, dashT); dashT = 0; } // 보스 처치 멈춤은 빼고 잰다
-    for (const ev of s.events) { if (ev.type === "hurt") s.hurts++; if (ev.type === "bossdown") s.bossPts = ev.score; }
+    for (const ev of s.events) { if (ev.type === "hurt") s.hurts++; if (ev.type === "bossdown") s.bossPts += ev.score; if (ev.type === "multi" && ev.frenzy) s.bossPts += ev.pts / 2; } // 보스 몫 = 처치 보너스 + 광란으로 더 받은 점수
     s.events.length = 0;
   }
   return s;
@@ -262,12 +307,20 @@ for (const aim of [0.12, 0.3, 0.6, 1.0]) {
 }
 { const rs = [1, 2, 3, 4, 5, 6].map((k) => bot(k, 0.3, true));
   console.log("  아무 방향 0.3초 간격(대충 긋기 가정): " + rs.map((s) => `${s.score}점/${s.kills}처치/LV${s.maxLv}/${s.result && s.result.kind === "red" ? "붉은것 " + s.t.toFixed(1) + "s" : "완주"}`).join("  ")); }
-{ // DAILY 공정성: 같은 시드면 플레이가 달라도 n번째 대열은 같은 종류·같은 쪽
-  const a = A.createGame(20261107), b = A.createGame(20261107);
-  for (let i = 0; i < 50; i++) b.rand(); // b는 다른 플레이로 잡난수를 더 썼다고 가정
-  a.t = b.t = 8; let same = true;
-  for (let i = 0; i < 10; i++) { if (A.spawnWave(a) !== A.spawnWave(b)) same = false; }
-  ok(same, "같은 시드: 잡난수 소비와 무관하게 대열 순서가 같다");
+{ // DAILY 공정성(v2): 같은 시드면 플레이가 달라도 n번째 보충 무리의 패(종류·인원·정예·먹물 여부·자리 후보)가 같다. sub(s, 9) 전용 난수
+  const playLog = (seed, every, burn, aimed) => { const s = A.createGame(seed, { chop: true }); for (let i = 0; i < burn; i++) s.rand(); let th = 0, k = 0;
+    while (s.state === "play") { th -= 1 / 60; s.p.invuln = 1e9; s.reds.length = 0;
+      if (th <= 0 && !s.dash) { th = every; k++; let a = k * 2.399;
+        if (aimed) { let n = -1; for (let i = 0; i < 24; i++) { const q = i / 24 * Math.PI * 2, pl = A.plan(s, s.p.x + Math.cos(q) * 300, s.p.y + Math.sin(q) * 300); if (pl && pl.cut.length > n) { n = pl.cut.length; a = q; } } }
+        A.slash(s, s.p.x + Math.cos(a) * 300, s.p.y + Math.sin(a) * 300); }
+      A.update(s, 1 / 60); s.events.length = 0; }
+    return s; };
+  const a = playLog(20261109, 0.12, 0, true), b = playLog(20261109, 0.7, 50, false); // 손 빠르기·방향·잡난수 소비가 다른 두 판
+  const raw = (l) => [l.draw, l.size, l.cands].join("|"), read = (l) => [l.kind, l.elite, l.drop].join("|");
+  let cmp = 0, cmpAct = 0, same = true;
+  for (const lb of b.refillLog) { const la = a.refillLog.find((x) => x.n === lb.n); if (!la) continue; cmp++; if (raw(la) !== raw(lb)) same = false;
+    if (la.act === lb.act) { cmpAct++; if (read(la) !== read(lb)) same = false; } }
+  ok(same && cmp === b.refillLog.length && cmp >= 30 && a.kills !== b.kills, `같은 시드, 다른 입력(처치 ${a.kills}/${b.kills}, 무리 ${a.refillLog.length}/${b.refillLog.length}): n번째 무리 난수 패 ${cmp}개 모두 같고, 같은 막에 나온 ${cmpAct}개는 종류까지 같다`);
 }
 { // 여럿 꿸 때 끊김: 한 일섬 동안 멈춘 시간 합이 작아야 한다(적중마다 멈추면 렉처럼 보였다)
   const s = A.createGame(3); s.enemies = []; s.reds = []; s.redT = Infinity; s.started = true;
@@ -279,7 +332,7 @@ for (const aim of [0.12, 0.3, 0.6, 1.0]) {
 // 19. chop 시험 모드(2026-11-08): 몸은 커서 너머 over에서 멈춘다. 최소 min, 최대 벽. 벽에 못 닿으면 검기 반사 없음
 {
   const C = CFG.chop;
-  const go = (tx, ty, lv = 1, px = 480) => { const s = blank(); s.chop = true; s.lv = lv; s.p.x = px; s.p.y = 270;
+  const go = (tx, ty, lv = 1, px = 480) => { const s = blank(false); s.chop = true; s.lv = lv; s.p.x = px; s.p.y = 270;
     const pl = A.plan(s, tx, ty); let wv = 0; A.slash(s, tx, ty); for (let i = 0; i < 60 && (s.dash || s.waves.length); i++) { A.update(s, 1 / 60); wv = Math.max(wv, s.waves.length); } return { s, pl, wv }; };
   const near = go(500, 270);
   ok(Math.abs(near.s.p.x - (480 + C.min)) < 0.5 && near.pl.L === C.min, `가까운 커서(20) → 최소 ${C.min} 이동(x ${near.s.p.x.toFixed(1)})`);
@@ -298,17 +351,39 @@ for (const aim of [0.12, 0.3, 0.6, 1.0]) {
   const opt = A.createGame(1, { chop: true }), dflt = A.createGame(1);
   ok(opt.chop === true && dflt.chop === false, "createGame(seed, {chop:true}) 와 기본값 false");
   // 예약 입력: 돌진이 끝난 새 위치에서 커서까지 거리를 다시 잰다
-  const b = blank(); b.chop = true; A.slash(b, 600, 270); A.update(b, 1 / 60); A.slash(b, 600, 270);
+  const b = blank(false); b.chop = true; A.slash(b, 600, 270); A.update(b, 1 / 60); A.slash(b, 600, 270);
   run(b, 0.6);
   ok(Math.abs(b.p.x - 480) < 0.5, `예약 클릭은 새 위치(730)에서 다시 계산: (600) 쪽으로 ${C.min} → x ${b.p.x.toFixed(1)}`);
   // 붉은 것: 커서 너머 멈출 곳 뒤에 있으면 걸리지 않는다
   const r = blank(); r.chop = true; r.reds.push({ x: 900, y: 270, vx: 0, vy: 0, r: CFG.red.r, life: 99 });
   const rp = A.plan(r, 600, 270); A.slash(r, 600, 270); run(r, 0.4);
   ok(rp.red.length === 0 && r.state === "play", "멈출 곳 너머의 붉은 것은 미리보기에도 실제로도 걸리지 않는다");
-  const rb = blank(); rb.chop = true; A.slash(rb, 600, 270); A.update(rb, 1 / 60); A.slash(rb, 730, 200); // 끝(730,270)에서 위로
+  const rb = blank(false); rb.chop = true; A.slash(rb, 600, 270); A.update(rb, 1 / 60); A.slash(rb, 730, 200); // 끝(730,270)에서 위로
   rb.reds.push({ x: 730, y: 170, vx: 0, vy: 0, r: CFG.red.r, life: 99 }); rb.events.length = 0;
   const rbe = []; for (let i = 0; i < 40; i++) { A.update(rb, 1 / 60); rbe.push(...rb.events); rb.events.length = 0; }
   ok(rb.state === "play" && rbe.some((e) => e.type === "bufferCancel"), "chop 예약 입력도 새 경로에 붉은 것이 있으면 취소");
+}
+// 20. 즉시 일섬(2026-11-09 v2): s.instant면 몸 구간이 사실상 즉시. 판정·반사는 그대로. 기본 true, opts.instant로 끔
+{
+  ok(A.createGame(1).instant === true && A.createGame(1, { instant: false }).instant === false && A.createGame(1, { chop: true, instant: true }).chop === true, "createGame 기본 instant true, opts.instant false 허용");
+  // 가장 긴 첫 구간(모서리→맞은편 모서리)도 0.04초 안
+  const time = (instant) => { const s = blank(instant); s.p.x = CFG.pad + 1; s.p.y = CFG.pad + 1; A.slash(s, A.W, A.H); let t = 0; while (s.dash && t < 2) { A.update(s, 1 / 240); t += 1 / 240; } return { t, L: Math.hypot(s.p.x - CFG.pad - 1, s.p.y - CFG.pad - 1) }; };
+  const on = time(true), off = time(false);
+  ok(on.t <= 0.04 && off.t > 0.2, `대각선 ${on.L.toFixed(0)}px 첫 구간: instant ${on.t.toFixed(3)}초 <= 0.04 (off ${off.t.toFixed(3)}초)`);
+  // 같은 배치에서 instant on/off 결과(벤 적·멈춘 곳·반사)가 같다
+  const same = (instant) => { const s = blank(instant); s.xp = CFG.levels[2]; s.lv = 3; for (let i = 0; i < 4; i++) A.add(s, "soldier", 600 + i * 70, 270 + i * 4); A.add(s, "soldier", 300, 270);
+    const pl = A.plan(s, 900, 270), evs = []; A.slash(s, 900, 270); for (let i = 0; i < 60 && (s.dash || s.waves.length); i++) { A.update(s, 1 / 60); evs.push(...s.events); s.events.length = 0; }
+    return { k: s.kills, x: s.p.x.toFixed(2), bo: evs.filter((e) => e.type === "bounce").length, segs: pl.segs.length, pts: s.score }; };
+  const a = same(true), b = same(false);
+  ok(JSON.stringify(a) === JSON.stringify(b) && a.k === 5 && a.bo === 1, `LV3 반사 포함 같은 결과: instant ${JSON.stringify(a)} / off ${JSON.stringify(b)}`);
+  // 붉은 것 즉사도 그대로
+  const r = blank(true); r.reds.push({ x: 700, y: 270, vx: 0, vy: 0, r: CFG.red.r, life: 99 }); A.slash(r, 900, 270); A.update(r, 1 / 60);
+  ok(r.state === "end" && r.result.kind === "red", "instant에서도 첫 구간의 붉은 것은 즉사");
+  // instantGrace: 도착점에서 원래 돌진 시간만큼 몸 부딪힘 무시, 그 뒤엔 맞는다
+  const g = blank(true); g.chop = true; g.p.x = 200; g.p.y = 270; A.slash(g, 400, 270); A.update(g, 1 / 60); const grace = g.p.grace, x = g.p.x;
+  A.add(g, "soldier", x + 15, 270); A.update(g, 1 / 60); const hurtEarly = g.p.invuln > 0;
+  for (let i = 0; i < 20; i++) { g.enemies[0].x = g.p.x + 15; g.enemies[0].y = g.p.y; A.update(g, 1 / 60); }
+  ok(!g.dash && Math.abs(grace - (x - 200) / CFG.dashSpeed) < 1e-9 && !hurtEarly && g.p.invuln > 0, `instant 도착 뒤 ${grace.toFixed(3)}초(=${(x - 200).toFixed(0)}px/원래 속도) 무피격, 그 뒤엔 피격`);
 }
 console.log(fails ? `${fails} failed` : "all passed");
 process.exit(fails ? 1 : 0);
