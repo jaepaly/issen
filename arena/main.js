@@ -22,10 +22,11 @@
   const today = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
   let mode = store.get("arena-mode") === "random" ? "random" : "daily";
   let seed = 0, firstRun = !store.get("arena-played"), titleOn = true, copied = 0, resultAt = 0, heldAtEnd = false, pointerHeld = false;
-  // 이동 방식(2026-11-08): SHORT = 커서 근처에서 멈춘다(game.js 의 s.chop), WALL = 벽까지 돌진. 기록은 방식별로 따로 둔다(섞이면 비교가 무의미)
-  let chopOn = store.get("arena-chop") !== "0";
-  const CK = () => (chopOn ? "-chop" : ""); // WALL 은 예전 키 그대로(기존 기록은 벽 돌진 기록이다)
-  function newGame() { seed = mode === "daily" ? today() : (Math.random() * 1e9) | 0; const g = createGame(seed); g.chop = chopOn; return g; }
+  // 이동 방식: 2026-11-08 SHORT(커서 근처에서 멈춤, game.js 의 s.chop)와 WALL(벽까지 돌진)을 M 키로 골랐다.
+  // 2026-11-09 사용자 승인으로 WALL 은 플레이어 쪽에서 걷어 내고 항상 SHORT. 기록 키는 SHORT 가 쓰던 -chop 접미사 그대로(기존 SHORT 기록 보존).
+  // 옛 WALL 기록(접미사 없는 키)은 읽지 않는다. game.js 의 chop=false 경로는 테스트용으로 남아 있다
+  const CK = () => "-chop";
+  function newGame() { seed = mode === "daily" ? today() : (Math.random() * 1e9) | 0; const g = createGame(seed); g.chop = true; return g; }
   const dailyKey = () => "arena-daily-" + (mode === "daily" && seed ? seed : today()) + CK();
   const bestKey = () => "arena-best-score" + CK();
   let s = newGame();
@@ -43,9 +44,16 @@
   let decals = [], groundPat = null, bossWarn = null, aimDanger = false;
   let vk = 1, last = 0, endAt = 0, particles = [], halves = [], pops = [], flash = 0, lvPop = null;
   let best = +store.get(bestKey()) || 0, dayBest = +store.get(dailyKey()) || 0;
-  // 페이스 비교: 최고 기록 판의 점수 곡선(0.5초 간격 41칸)을 저장해 두고, 판 도중 같은 시각의 점수와 비교한다
-  const PACE_STEP = 0.5, curveKey = () => (mode === "daily" ? dailyKey() + "-curve" : "arena-best-curve" + CK());
-  const loadCurve = () => { try { const c = JSON.parse(store.get(curveKey()) || "null"); return Array.isArray(c) && c.length ? c : null; } catch (e) { return null; } };
+  // 페이스 비교: 판의 점수 곡선(0.5초 간격 41칸)을 저장해 두고, 판 도중 같은 시각의 점수와 비교한다
+  // 비교 대상(2026-11-09): 오늘 최고(일일 모드) → 전체 최고 → 직전 판. 무엇과 비교 중인지 왼쪽 위에 작게 쓴다
+  const PACE_STEP = 0.5, PACE_POP_MS = 700;
+  const dayCurveKey = () => dailyKey() + "-curve", bestCurveKey = () => "arena-best-curve" + CK(), lastCurveKey = () => "arena-last-curve" + CK();
+  const readCurve = (k) => { try { const c = JSON.parse(store.get(k) || "null"); return Array.isArray(c) && c.length ? c : null; } catch (e) { return null; } };
+  function loadCurve() {
+    const order = (mode === "daily" ? [[dayCurveKey(), "vs today"]] : []).concat([[bestCurveKey(), "vs best"], [lastCurveKey(), "vs last"]]);
+    for (const [k, label] of order) { const c = readCurve(k); if (c) return { c, label }; }
+    return null;
+  }
   let run = [], ghost = loadCurve(), paceSplit = 0, pacePop = null;
 
   // ---------- 소리 ----------
@@ -144,7 +152,7 @@
   const COPY_BTN = { x: W / 2 - 110, y: 382, w: 220, h: 32 };
   function shareLine() {
     const r = s.result;
-    return `${TITLE} ${r.score} (${gradeOf(r.score)}) · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed}${r.chop ? "" : " · wall"}`;
+    return `${TITLE} ${r.score} (${gradeOf(r.score)}) · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed}`;
   }
   function copyResult() {
     const t = shareLine();
@@ -152,22 +160,21 @@
   }
   // 판 끝: 전체 최고점과 (일일 모드면) 오늘 최고점을 따로 저장. 첫 판 안내 꼬리표는 한 판 끝나면 끈다
   function recordResult(r) {
-    r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed; r.chop = chopOn;
+    r.prevBest = best; r.prevDay = dayBest; r.mode = mode; r.seedUsed = seed;
     run.push(r.score); // 마지막 칸은 최종 점수
-    const hbNow = mode === "daily" ? dayBest : best;
-    if (r.score > hbNow) store.set(curveKey(), JSON.stringify(run));
+    const curve = JSON.stringify(run);
+    store.set(lastCurveKey(), curve); // 직전 판: 최고 곡선이 없을 때의 비교 대상
+    if (r.score > best) store.set(bestCurveKey(), curve); // 전체 최고: 일일·랜덤 어느 쪽에서 세웠든
+    if (mode === "daily" && r.score > dayBest) store.set(dayCurveKey(), curve);
     if (r.score > best) { best = r.score; r.newBest = best > 0; store.set(bestKey(), best); }
     if (mode === "daily" && r.score > dayBest) { dayBest = r.score; r.newDay = dayBest > 0; store.set(dailyKey(), dayBest); }
     store.set("arena-played", 1); firstRun = false;
   }
   function toggleMode() { mode = mode === "daily" ? "random" : "daily"; store.set("arena-mode", mode); }
-  function toggleChop() { chopOn = !chopOn; store.set("arena-chop", chopOn ? 1 : 0); } // 기록(best·곡선)은 restart 에서 새 방식 것으로 다시 읽는다
-  const moveName = () => (chopOn ? "SHORT" : "WALL");
   cv.addEventListener("contextmenu", (e) => e.preventDefault());
   addEventListener("keydown", (e) => {
     const atEnd = s.state === "end", fresh = s.state === "play" && !s.started;
     if (e.code === "KeyT" && (titleOn || atEnd || fresh)) { toggleMode(); if (!atEnd) restart(); return; } // 시작 전·결과 화면에서만 시드 전환
-    if (e.code === "KeyM" && (titleOn || atEnd || fresh)) { toggleChop(); if (!atEnd) restart(); return; } // 이동 방식도 같은 규칙
     if (e.code === "KeyC" && atEnd) { copyResult(); return; }
     if (e.code === "KeyR" || e.code === "Space") {
       e.preventDefault();
@@ -653,13 +660,20 @@
     const hb = mode === "daily" ? dayBest : best;
     if (hb > 0) text((mode === "daily" ? "TODAY BEST " : "BEST ") + fmt(hb), 28, 68, 12, s.score > hb ? GOLD : "rgba(29,26,23,0.55)", "left");
     const pd = paceDelta();
-    if (pd !== null && s.started) { // 같은 시각의 최고 기록 판보다 앞서면 금색, 뒤지면 회색. 5·10·15초에 한 번씩 크게 튄다
-      const pp = pacePop && now - pacePop.born < 900 ? 1 - (now - pacePop.born) / 900 : 0;
-      text((pd >= 0 ? "+" : "−") + fmt(Math.abs(pd)) + (pp > 0 ? "  @" + pacePop.at + "s" : ""), 28, 90 + pp * 6, 15 + pp * 13, pd >= 0 ? GOLD : "rgba(29,26,23,0.5)", "left");
+    if (pd !== null && s.started) { // 같은 시각의 비교 곡선보다 앞서면 금색, 뒤지면 회색. 무엇과 비교 중인지 옆에 작게
+      const ps = (pd >= 0 ? "+" : "−") + fmt(Math.abs(pd));
+      text(ps, 28, 90, 15, pd >= 0 ? GOLD : "rgba(29,26,23,0.5)", "left");
+      ctx.font = "15px serif"; text(ghost.label, 28 + ctx.measureText(ps).width + 8, 90, 11, "rgba(29,26,23,0.4)", "left");
+    }
+    if (pacePop && s.state === "play" && now - pacePop.born < PACE_POP_MS) { // 5·10·15초: 화면 가운데 옅게 크게(마지막 3초 카운트다운과 같은 방식). 빨강은 쓰지 않는다
+      const q = (now - pacePop.born) / PACE_POP_MS, inK = Math.min(1, (now - pacePop.born) / 90), up = pacePop.d >= 0;
+      ctx.globalAlpha = (up ? 0.42 : 0.2) * inK * (q < 0.55 ? 1 : 1 - (q - 0.55) / 0.45);
+      text((up ? "+" : "−") + fmt(Math.abs(pacePop.d)), W / 2, H / 2 + 40, 120 * (1.12 - 0.12 * inK), up ? GOLD : INK);
+      text(pacePop.at + "s  " + pacePop.label, W / 2, H / 2 + 76, 20, up ? GOLD : INK);
+      ctx.globalAlpha = 1;
     }
     text(left.toFixed(1), W - 26, 44, 18, INK, "right");
     text(mode === "daily" ? "DAILY" : "RANDOM", W - 26, 60, 11, "rgba(29,26,23,0.45)", "right");
-    text("MOVE " + moveName(), W - 26, 73, 10, "rgba(29,26,23,0.4)", "right");
     const L = CFG.levels, lo = L[s.lv - 1], hi = L[s.lv] ?? lo, k = hi > lo ? (s.xp - lo) / (hi - lo) : 1;
     ctx.fillStyle = "rgba(29,26,23,0.12)"; ctx.fillRect(20, H - 14, W - 40, 5);
     ctx.fillStyle = tr >= 3 ? GOLD : ACC; ctx.fillRect(20, H - 14, (W - 40) * k, 5);
@@ -702,14 +716,14 @@
     ctx.fillStyle = "rgba(239,231,214,0.9)"; ctx.fillRect(0, 0, W, H);
     text(TITLE, W / 2, 150, 92, INK);
     text("Don't cut red.", W / 2, 198, 26, RED);
-    text("Click to slash wall to wall. Cut many at once. Never cut RED.", W / 2, 268, 19, INK);
+    text("Click to slash. Cut fast. Never cut RED.", W / 2, 268, 19, INK); // 2026-11-09 AI 초안, 사용자 승인("ㄱ")
     // 빨간 유닛 그림
     const rx = W / 2, ry = 336, pulse = 1 + 0.06 * Math.sin(now / 120);
     if (ok("red")) sprite("red", rx, ry, now / 900, 24 * pulse); else circle(rx, ry, 22 * pulse, "rgba(200,36,27,0.25)", RED, 4);
     circle(rx, ry, 31, null, "rgba(200,36,27,0.5)", 2);
     line(rx - 44, ry + 44, rx + 44, ry - 44, RED, 4); // 금지 사선
     const hb = mode === "daily" ? dayBest : best;
-    text((mode === "daily" ? "DAILY " + seed : "RANDOM") + "   ·   T to switch   ·   M  move: " + moveName() + (hb > 0 ? "   ·   best " + fmt(hb) : ""), W / 2, 418, 14, "rgba(29,26,23,0.6)");
+    text((mode === "daily" ? "DAILY " + seed : "RANDOM") + "   ·   T to switch" + (hb > 0 ? "   ·   best " + fmt(hb) : ""), W / 2, 418, 14, "rgba(29,26,23,0.6)");
     const a = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now / 260));
     text("Click to start", W / 2, 470, 22, `rgba(29,26,23,${a})`);
   }
@@ -756,7 +770,7 @@
     text(cMsg, W / 2, b.y + 22, 15, copied < 0 && cAge < 1.6 ? RED : INK);
     // 재시작 안내: 클릭은 1.2초 뒤부터
     const clickOk = t > 1.2 && !heldAtEnd;
-    text("R / Space  retry" + (clickOk ? "   ·   click  retry" : "") + "   ·   T  next run: " + (mode === "daily" ? "DAILY" : "RANDOM") + "   ·   M  move: " + moveName(), W / 2, 456, 15, "rgba(29,26,23,0.6)");
+    text("R / Space  retry" + (clickOk ? "   ·   click  retry" : "") + "   ·   T  next run: " + (mode === "daily" ? "DAILY" : "RANDOM"), W / 2, 456, 15, "rgba(29,26,23,0.6)");
     ctx.restore();
     // 결과 화면에서는 시스템 커서 대신 작은 점
     circle(mouse.x, mouse.y, 4, INK);
@@ -769,12 +783,17 @@
     while (run.length <= i) run.push(s.score);
     run[i] = s.score;
     const sp = Math.floor(s.t / 5) * 5;
-    if (sp > paceSplit && sp < CFG.limit) { paceSplit = sp; const d = paceDelta(); if (d !== null) { pacePop = { born: now, at: sp, d }; play(["tick"], d >= 0 ? 0.5 : 0.25, d >= 0 ? 1.25 : 0.8); } }
+    if (sp > paceSplit && sp < CFG.limit) { paceSplit = sp; const d = paceDelta(); if (d !== null) { pacePop = { born: now, at: sp, d, label: ghost.label }; paceSfx(d >= 0); } }
   }
   function paceDelta() {
     if (!ghost || !s.started) return null;
-    const i = Math.min(ghost.length - 1, Math.floor(s.t / PACE_STEP));
-    return s.score - ghost[i];
+    const c = ghost.c, i = Math.min(c.length - 1, Math.floor(s.t / PACE_STEP));
+    return s.score - c[i];
+  }
+  // 구간 알림음(2026-11-09): tick(취소음)과 구별되게 합성. 앞서면 맑은 두 음(사인, 높게), 뒤지면 낮게 걸러진 둔탁한 '퉁'
+  function paceSfx(ahead) {
+    if (ahead) { tone(1568, 0.22, "sine", 0.07); setTimeout(() => tone(2093, 0.3, "sine", 0.05), 55); }
+    else { tone(98, 0.16, "triangle", 0.14); noise(0.09, 180, 0.22); }
   }
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000 || 0);

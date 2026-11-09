@@ -3,7 +3,7 @@
 *Don't cut red.*
 
 A 20-second mouse-slashing game made for the 20 Second Game Jam 2026.
-Click and you dash wall to wall, cutting everything in your path.
+Click and you dash just past your cursor, cutting everything in your path.
 Cut many enemies in one line, keep the chain going, and never cut the red one.
 
 ## Play locally
@@ -19,7 +19,7 @@ Or play online: https://jaepaly.github.io/issen/
 ## Rules in one line
 
 Score per slash = (enemies cut in that slash)² × chain multiplier.
-Leveling up makes your sword wave bounce off the walls.
+Reach a wall and, as you level up, your sword wave bounces off it.
 Killing the general unleashes a screen-wide cut.
 
 ## Folders

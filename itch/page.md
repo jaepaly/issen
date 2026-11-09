@@ -11,13 +11,13 @@
 
 *Don't cut red.*
 
-Click. Cut wall to wall. Cut everything — except red.
+Click to slash. Cut fast. Cut everything — except red.
 
-You are a lone swordsman in an ink-wash battlefield, and you have 20 seconds. Every click is a single draw-cut (*issen*) that flies from where you stand to the wall in the direction of your cursor, slicing through everything on the line.
+You are a lone swordsman in an ink-wash battlefield, and you have 20 seconds. Every click is a single draw-cut (*issen*) that dashes from where you stand toward your cursor and a little past it, slicing through everything on the line.
 
 **How to play**
 - Aim with the mouse. Click to cut. There is no cooldown.
-- Each cut flies all the way to the wall.
+- Each cut carries you just past your cursor. Reach a wall and your sword wave bounces off it.
 - Touch a red soldier with your blade and it's over. Instantly.
 - Line them up. One cut through many is worth far more than many cuts through one.
 
