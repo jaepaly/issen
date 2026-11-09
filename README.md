@@ -18,9 +18,11 @@ Or play online: https://jaepaly.github.io/issen/
 
 ## Rules in one line
 
-Score per slash = (enemies cut in that slash)² × chain multiplier.
-Reach a wall and, as you level up, your sword wave bounces off it.
+Score per slash = (enemies cut in that slash)² × chain bonus (cut again within 0.8 s to grow it, up to ×6; a miss breaks it). Cutting a red soldier ends the run.
+Click past a wall and you stop at the wall. Level up to get faster and see more; from LV3 a sword wave bounces off the wall.
 Killing the general unleashes a screen-wide cut.
+Best score with live pace at 5/10/15 s, DAILY (same seed per day) or RANDOM (T), R/Space restart, C copies your result with the link.
+The game shows a photosensitivity warning: full-screen white flashes.
 
 ## Folders
 

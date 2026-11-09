@@ -11,9 +11,8 @@
   // ---------- 기록·시드(W2) ----------
   const TITLE = "ISSEN"; // 최종 제목(2026-11-07 사용자 결정)
   // 등급 기준: tests/arena-sim.js 봇 수치 참고(2026-11-07 W1 시간 수정 뒤: 대충 긋는 봇 131~704, 조준 1초 봇 553~1,161, 0.12~0.6초 봇 1,105~2,631). 사람 기록을 보고 다시 맞춘다
-  const GRADES = [["S", 10000], ["A", 6500], ["B", 3500], ["C", 1200], ["D", 0]]; // 2026-11-07 사용자 직접 플레이: "7천점은 쉽게 나옴" → 7천을 A로(사람 한 명 기준 임시값) // 2026-11-07 반사 일섬·보스 발도 뒤 봇 중앙값(조준 0.3초 6,673, 1초 4,064, 막누르기 377)에 맞춰 약 1.8배
-  const gradeOf = (sc) => GRADES.find((g) => sc >= g[1])[0];
-  const nextGrade = (sc) => { let n = null; for (const g of GRADES) if (sc < g[1]) n = g; return n; }; // 바로 위 등급
+  // 2026-11-09 등급(S~D) 제거(사용자 제안·승인). 결과 화면 목표는 "최고 기록까지 남은 점수"
+  const SHARE_URL = "https://jaepaly.github.io/issen/"; // 공유 문구 끝 주소. itch 주소가 생기면 여기만 바꾼다
   const fmt = (n) => Math.round(n).toLocaleString("en-US");
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -59,6 +58,8 @@
   // ---------- 소리 ----------
   let ac = null;
   function audio() { if (!ac) try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} return ac; }
+  // 첫 입력에서 생성 + suspended면 깨운다(자동재생 정책으로 멈춘 채 만들어지는 경우)
+  function wakeAudio() { const a = audio(); if (a && a.state === "suspended") try { a.resume().catch(() => {}); } catch (e) {} return a; }
   function noise(dur, freq, gain) {
     const a = audio(); if (!a) return;
     const b = a.createBuffer(1, Math.max(1, a.sampleRate * dur), a.sampleRate), d = b.getChannelData(0);
@@ -137,7 +138,7 @@
   }
   addEventListener("pointermove", (e) => { mouse = toCanvas(e); });
   cv.addEventListener("pointerdown", (e) => {
-    e.preventDefault(); mouse = toCanvas(e); audio(); loadSfx();
+    e.preventDefault(); mouse = toCanvas(e); wakeAudio(); loadSfx();
     pointerHeld = true;
     if (titleOn) { titleOn = false; return; } // 시작 화면: 첫 클릭은 닫기만(일섬 안 나감)
     if (s.state === "end") {
@@ -152,7 +153,7 @@
   const COPY_BTN = { x: W / 2 - 110, y: 382, w: 220, h: 32 };
   function shareLine() {
     const r = s.result;
-    return `${TITLE} ${r.score} (${gradeOf(r.score)}) · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed}`;
+    return `${TITLE} ${r.score} · best cut ${r.bestCut} · LV${r.maxLv} · ${r.mode === "daily" ? "daily" : "seed"} ${r.seed ?? r.seedUsed} · ${SHARE_URL}`;
   }
   function copyResult() {
     const t = shareLine();
@@ -173,6 +174,7 @@
   function toggleMode() { mode = mode === "daily" ? "random" : "daily"; store.set("arena-mode", mode); }
   cv.addEventListener("contextmenu", (e) => e.preventDefault());
   addEventListener("keydown", (e) => {
+    wakeAudio(); loadSfx();
     const atEnd = s.state === "end", fresh = s.state === "play" && !s.started;
     if (e.code === "KeyT" && (titleOn || atEnd || fresh)) { toggleMode(); if (!atEnd) restart(); return; } // 시작 전·결과 화면에서만 시드 전환
     if (e.code === "KeyC" && atEnd) { copyResult(); return; }
@@ -687,7 +689,7 @@
       ctx.save(); ctx.globalAlpha = al; ctx.translate(W / 2, H / 2 - 70); ctx.rotate(-0.05); ctx.scale(sc, sc);
       ctx.fillStyle = tier(perkPop.lv) >= 3 ? "#7a5a0c" : INK; ctx.fillRect(-170, -48, 340, 96);
       ctx.strokeStyle = PAPER; ctx.lineWidth = 2; ctx.strokeRect(-163, -41, 326, 82);
-      text(perkPop.name + " ×" + perkPop.n, 0, 12, 48, PAPER); text("LV" + perkPop.lv, 0, 34, 15, PAPER);
+      text(perkPop.name + (perkPop.n > 1 ? " ×" + perkPop.n : ""), 0, 12, 48, PAPER); text("hit a wall to bounce", 0, 34, 15, PAPER); // 2026-11-09: 반사는 LV3 한 번, SHORT 이동은 벽에 닿을 때만 반사
       ctx.restore();
     }
     if (bossFx && now >= bossFx.at && now - bossFx.at < 1700) { // 대장군 발도 점수: 갈라지는 순간 화면 가운데 크게
@@ -726,6 +728,7 @@
     text((mode === "daily" ? "DAILY " + seed : "RANDOM") + "   ·   T to switch" + (hb > 0 ? "   ·   best " + fmt(hb) : ""), W / 2, 418, 14, "rgba(29,26,23,0.6)");
     const a = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now / 260));
     text("Click to start", W / 2, 470, 22, `rgba(29,26,23,${a})`);
+    text("Contains flashing lights.", W / 2, H - 18, 13, "rgba(29,26,23,0.55)"); // 잼 필수 번쩍임 경고. 2026-11-09 AI 초안, 문구는 사용자 확정 전
   }
 
   function drawResult(now) {
@@ -744,21 +747,16 @@
       text("You cut the red one.", W / 2 + 12, 96, 28, RED);
       text("at " + r.time.toFixed(1) + "s", W / 2, 122, 14, "rgba(200,36,27,0.75)");
     } else text("Time!", W / 2, 98, 32, INK);
-    // 점수와 등급 도장
-    const g = gradeOf(r.score), ng = nextGrade(r.score);
+    // 점수(2026-11-09 등급 도장 제거, 가운데 정렬)
     text(fmt(r.score), W / 2, 214, 88, dead ? INK : ACC);
-    const sx = W / 2 + 190 + Math.max(0, fmt(r.score).length - 4) * 22, sy = 182, st = Math.min(1, t / 0.5);
-    ctx.save(); ctx.translate(sx, sy); ctx.rotate(-0.12); const k = 1 + (1 - st) * 0.6; ctx.scale(k, k);
-    ctx.fillStyle = g === "S" ? GOLD : RED; ctx.fillRect(-34, -34, 68, 68);
-    ctx.strokeStyle = PAPER; ctx.lineWidth = 2; ctx.strokeRect(-29, -29, 58, 58);
-    text(g, 0, 18, 52, PAPER);
-    ctx.restore();
     // 최고점
     const isDay = r.mode === "daily";
     if (r.newBest) { const p = 0.7 + 0.3 * Math.sin(now / 140); text("NEW BEST!", W / 2, 254, 28 * p + 6, GOLD); }
     else if (isDay && r.newDay) { const p = 0.7 + 0.3 * Math.sin(now / 140); text("NEW TODAY BEST!", W / 2, 254, 24 * p + 5, GOLD); }
     else text((isDay ? "today best " + fmt(dayBest) + "   ·   " : "") + "best " + fmt(best), W / 2, 252, 17, "rgba(29,26,23,0.7)");
-    text(ng ? fmt(ng[1] - r.score) + " to " + ng[0] : "Top grade.", W / 2, 284, 18, ng ? ACC : GOLD);
+    // 목표 줄: 판 전 기록 기준(일일 모드는 오늘 최고 → 넘었으면 전체 최고). 기록이 없던 첫 판은 생략
+    const goal = isDay && !r.newDay && r.prevDay > 0 ? [r.prevDay, "today's best"] : !r.newBest && r.prevBest > 0 ? [r.prevBest, "your best"] : null;
+    if (goal) text(goal[0] === r.score ? "Tied " + goal[1] + "." : fmt(goal[0] - r.score) + " to beat " + goal[1], W / 2, 284, 18, ACC);
     // 세부
     text(`best cut ${r.bestCut}   ·   kills ${r.kills}   ·   max chain ${r.maxChain ?? 0}   ·   LV ${r.maxLv}`, W / 2, 328, 16, INK);
     text((isDay ? "DAILY " : "RANDOM seed ") + (r.seed ?? r.seedUsed) + (isDay ? "   ·   same board for everyone today" : ""), W / 2, 356, 13, "rgba(29,26,23,0.55)");

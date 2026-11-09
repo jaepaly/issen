@@ -7,41 +7,57 @@
 
 ## 영어 본문 (붙여 넣을 부분)
 
+<!-- 아래 영문 문구는 전부 AI 초안이다(2026-11-09 갱신). 사용자가 고르고 고친 뒤 올린다. -->
+
 **ISSEN**
 
-*Don't cut red.*
+20-second ink-wash sword slasher. Cut fast. Never cut red.
 
-Click to slash. Cut fast. Cut everything — except red.
+<!-- GIF 자리: 페이지 상단 3~5초 반복 GIF (itch/capture-plan.md 7번). 사람이 직접 플레이한 녹화로 만든다 -->
+[GIF HERE]
 
-You are a lone swordsman in an ink-wash battlefield, and you have 20 seconds. Every click is a single draw-cut (*issen*) that dashes from where you stand toward your cursor and a little past it, slicing through everything on the line.
+**Photosensitivity warning: full-screen white flashes.**
+<!-- 확정 문구는 사용자 몫. 최종 섬광 세기를 보고 정한다. 게임 안에도 경고 한 줄이 있다 -->
+
+You have 20 seconds. Every click is a single draw-cut (*issen*): you dash in a straight line and stop a little past your cursor, slicing everything on the way. Click past a wall and you stop at the wall.
 
 **How to play**
 - Aim with the mouse. Click to cut. There is no cooldown.
-- Each cut carries you just past your cursor. Reach a wall and your sword wave bounces off it.
-- Touch a red soldier with your blade and it's over. Instantly.
+- Touch a red soldier with your blade and the run ends. Instantly.
 - Line them up. One cut through many is worth far more than many cuts through one.
+- Keep cutting: hit again within 0.8 s to grow your chain. A cut that hits nothing breaks it.
 
 **Score**
-`cut² × chain` — the number of enemies in one cut, squared, times your chain.
-<!-- 점수 공식은 W3/W4 작업 결과에 맞춰 최종 확인. 지금 게임 안 규칙과 다르면 이 줄을 고친다 -->
+`cut² × chain bonus (up to ×6)` — the number of enemies in one cut, squared, times your chain bonus.
+<!-- 최대 배율 ×6은 코드 워커 변경 반영 기준. 최종 빌드와 다르면 고친다 -->
 
-**Coming soon** <!-- 기능이 들어가면 'Coming soon'을 빼고 설명으로 바꾼다. 안 들어가면 이 절을 지운다 -->
-- DAILY: one shared seed per day, so everyone faces the same battlefield.
-- Share line: copy your result as a one-line text to brag (or confess).
+**Growing stronger**
+- Level up and you get faster, and the battlefield zooms out.
+- From LV3, your cut throws a sword wave that bounces off the wall.
+- Kill the general to draw once more and cut down everything on screen.
+
+**Features**
+- Your best score, and live pace against it at 5, 10 and 15 seconds.
+- DAILY: same day, same battlefield for everyone. Press T for a RANDOM run.
+- R or Space to restart instantly. C copies your result line with the game link.
+
+<!-- 테마 연결: 선택 사항. 넣을지는 사용자가 정한다. 다른 테마는 쓰지 않는다 -->
+*Theme — Double or Quits:* one more enemy in the line squares your score — but one red in the line ends it all.
 
 **Controls**
-Mouse only. A mouse or trackpad with hover is required (no touch).
+Mouse only. A mouse or trackpad with hover is required (no touch). R / Space: restart. T: RANDOM. C: copy result.
 
 **Content note**
-Stylized ink-splatter violence. Brief screen flashes and screen shake on big cuts.
-<!-- 잼 FAQ: 발작을 일으킬 수 있는 번쩍임은 알리라고 함. 최종 연출의 섬광 세기를 보고 문구 확정 -->
+Stylized ink-splatter violence. Screen flashes and screen shake on big cuts.
 
 **Credits & AI disclosure**
-- Direction, design decisions and playtesting: <사용자 이름/닉네임>
+<!-- TODO(사용자): 이름/닉네임 칸을 채운다. 비워 둔 채 올리지 않는다 -->
+- Made by: **TODO — your name / handle**
+- Human (me): set the direction and the core rules, chose which features went in and rejected others (several AI proposals were turned down), played the game myself throughout and gave the feedback that drove the changes, and has final say on all text.
+- AI (Claude, Codex): wrote the code, proposed designs and alternatives, measured balance with bots (bot scores, not human play), and drafted documents including this page.
 - Art: generated with Codex CLI image generation (OpenAI image model), directed and selected by a human, then cropped and adjusted in code.
-- Code: written together with AI coding assistants (Claude, Codex), directed, reviewed and playtested by a human.
 - Sound effects: Kenney — "RPG Audio" and "Impact Sounds" (CC0), trimmed, layered and edited.
-- This game includes output of generative AI (art and code). Text on this page: <사람이 썼으면 그렇게, AI 초안을 고쳤으면 그렇게 적는다>
+- This game includes output of generative AI (code and art). Page text: AI draft, edited by a human. <!-- TODO(사용자): 실제로 고쳤는지에 맞게 고친다 -->
 
 Made for the 20 Second Game Jam 2026. Play time is 20 seconds or less.
 
@@ -85,8 +101,9 @@ Made for the 20 Second Game Jam 2026. Play time is 20 seconds or less.
 - [ ] 페이지 색: 배경 먹색(#1c1916)·글자 종이색(#f6ebd6), 강조색은 빨간 유닛 전용 붉은색만.
 
 ### 사용자가 정할 것
-- 첫 문장(태그라인 "Don't cut red." 다음 줄). 제목 ISSEN은 결정됨.
+- 첫 줄 소개(초안: "20-second ink-wash sword slasher. Cut fast. Never cut red."). 제목 ISSEN은 결정됨.
 - 크레딧에 쓸 이름. 코드 도구 이름을 어디까지 적을지(Claude/Codex).
-- 점수 줄 표기(`cut² × chain`)가 최종 규칙과 맞는지.
-- DAILY·공유 문구를 'Coming soon'으로 미리 알릴지, 들어간 뒤에만 적을지.
+- 점수 줄 표기(`cut² × chain bonus (up to ×6)`)가 최종 빌드와 맞는지.
+- 테마(Double or Quits) 한 줄을 넣을지.
+- 깜빡임 경고 확정 문구, 크레딧의 사람·AI 역할 문장.
 - 자동 시작 여부, 성인 콘텐츠 표시 여부.
