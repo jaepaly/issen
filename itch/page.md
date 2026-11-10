@@ -51,7 +51,7 @@ Stylized ink-splatter violence. Screen flashes and screen shake on big cuts.
 
 **Credits & AI disclosure**
 <!-- TODO(사용자): 이름/닉네임 칸을 채운다. 비워 둔 채 올리지 않는다 -->
-- Made by: **TODO — your name / handle**
+- Made by: **jaepaly** <!-- 2026-11-10 itch 사용자명으로 채움. 다른 이름을 쓰려면 바꾼다 -->
 - Human (me): set the direction and the core rules, chose which features went in and rejected others (several AI proposals were turned down), played the game myself throughout and gave the feedback that drove the changes, and has final say on all text.
 - AI (Claude, Codex): wrote the code, proposed designs and alternatives, measured balance with bots (bot scores, not human play), and drafted documents including this page.
 - Art: generated with Codex CLI image generation (OpenAI image model), directed and selected by a human, then cropped and adjusted in code.
@@ -82,6 +82,7 @@ Made for the 20 Second Game Jam 2026. Play time is 20 seconds or less.
 ### itch 설정 체크리스트
 출처: itch HTML5 문서 https://itch.io/docs/creators/html5 (2026-11-07 확인), 표지 규격은 공식 문서에서 찾지 못해 업로드 화면 안내와 커뮤니티 글 기준.
 
+- [ ] 프로젝트 주소(Project URL): **https://jaepaly.itch.io/issen** 로 만든다 — 게임 안 결과 복사(C) 링크가 이 주소를 가리킨다.
 - [ ] Kind of project: HTML. 업로드: `dist/issen-web.zip` → "This file will be played in the browser" 체크.
   - zip 요구: 최상위에 `index.html`, 파일 1,000개 이하, 풀었을 때 합계 500MB 이하, 파일 하나 200MB 이하, 경로 240자 이하, 파일명 대소문자 구분. (현재 빌드 40개, 약 1.1MB)
 - [ ] Embed options: **Embed in page**, Viewport **960 × 540**.

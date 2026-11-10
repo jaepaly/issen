@@ -12,7 +12,7 @@
   const TITLE = "ISSEN"; // 최종 제목(2026-11-07 사용자 결정)
   // 등급 기준: tests/arena-sim.js 봇 수치 참고(2026-11-07 W1 시간 수정 뒤: 대충 긋는 봇 131~704, 조준 1초 봇 553~1,161, 0.12~0.6초 봇 1,105~2,631). 사람 기록을 보고 다시 맞춘다
   // 2026-11-09 등급(S~D) 제거(사용자 제안·승인). 결과 화면 목표는 "최고 기록까지 남은 점수"
-  const SHARE_URL = "https://jaepaly.github.io/issen/"; // 공유 문구 끝 주소. itch 주소가 생기면 여기만 바꾼다
+  const SHARE_URL = "https://jaepaly.itch.io/issen"; // 공유 문구 끝 주소(2026-11-10 itch 사용자명 jaepaly 확인 → itch 주소로). itch 페이지 주소를 issen 으로 만들어야 맞다
   const fmt = (n) => Math.round(n).toLocaleString("en-US");
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },

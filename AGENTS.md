@@ -18,4 +18,4 @@
 - `itch/` itch 페이지 초안·촬영 계획. `tools/build.py`로 출품 zip(`dist/issen-web.zip`)을 만들고 참조 경로를 검사한다. `tools/build-sfx.py` 효과음 재생성, `tools/optimize-ground.py` 바닥 용량 줄이기(`prep-art.py` 뒤에 다시 실행).
 - 제목은 ISSEN(2026-11-07 사용자 결정). 잼 규칙상 사람이 지휘·직접 플레이테스트해야 하고 번쩍임 경고를 표시해야 한다.
 - GitHub: https://github.com/jaepaly/issen (공개, 2026-11-07 사용자 결정). `research/`(다른 출품작 분석)와 `dist/`는 .gitignore로 제외. push는 사용자가 요청할 때만.
-- GitHub Pages: https://jaepaly.github.io/issen/ (루트 index.html이 arena/로 넘긴다). git 작성자는 jaepaly(noreply 이메일).
+- itch: https://jaepaly.itch.io/issen (2026-11-10 사용자 가입, 사용자명 jaepaly. 게임 안 공유 링크가 이 주소). GitHub Pages: https://jaepaly.github.io/issen/ (루트 index.html이 arena/로 넘긴다). git 작성자는 jaepaly(noreply 이메일).
