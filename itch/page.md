@@ -75,7 +75,7 @@ Made for the 20 Second Game Jam 2026. Play time is 20 seconds or less.
 - 규칙 4: "AI agents (...) should not join this jam and will have their entries removed."
 - FAQ(AI): "We want to see games made by our fellow humans rather than AI." 공개 위치: "In your game's project page under "AI generation disclosure", indicate if your game does or does not include the output of Generative AI." → 페이지 편집 화면의 **AI generation disclosure** 항목에서 '포함함'을 고르고, 본문 크레딧에도 적는다(위 초안).
 - FAQ: 번쩍임 등 발작 유발 가능 효과는 알릴 것.
-- 제출 기간: 2026-10-23 00:00:01 ~ 2026-11-17 00:59:59. 페이지 상단은 "Oct 23 to Nov 16"로 보여 시간대가 명시돼 있지 않다. **11/16 저녁(한국 시간) 안에 제출**하는 것이 안전하다.
+- 제출 기간: 2026-10-23 00:00:01 ~ 2026-11-24 00:59:00 (2026-11-10 잼 페이지 재확인: 원래 11-17이던 마감이 1주 연장됨). 시간대가 명시돼 있지 않으므로 **11/23 저녁(한국 시간) 안에 제출**하는 것이 안전하다.
 - 심사·순위·상품은 없다("There are no judges, rankings or prizes").
 
 주의할 점: 규칙은 "사람이 전적으로 지휘하고 직접 플레이테스트하며 책임질 것"을 요구하고, 주최 측은 AI보다 사람이 만든 게임을 보고 싶다고 밝혔다. 금지는 아니지만, 크레딧에 사람의 역할(방향 결정·선별·플레이테스트)을 분명히 쓰고, 출품 전에 사용자가 직접 여러 판 플레이하는 것이 규칙상 필요하다. 생성형 AI 공개 문구를 흐리게 쓰지 않는다.

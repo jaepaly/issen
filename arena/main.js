@@ -609,6 +609,7 @@
       } else circle(p.x, p.y, 12 * vk, "#fff", tr >= 3 ? GOLD : INK, 3 * vk);
     }
     ctx.shadowBlur = 0;
+    // 2026-11-10 사용자 지적: 조준 점선도 먹색이면 적과 묻힘 → 커서와 같은 파랑(ACC). 착지 고리·반사 마름모도 파랑.
     // 조준선: 유닛 위에, 화면 배율과 상관없이 같은 굵기. 종이색 테두리로 먹 위에서도 보이게
     if (aimPl) {
       const pl = aimPl, rdy = !s.dash, danger = pl.red.length > 0;
@@ -619,12 +620,12 @@
         if (q.safe) continue; // 검기 길은 그리지 않는다(정리 2026-11-07): 첫 반사 표시와 걸릴 적의 옅은 고리만
         line(q.x1, q.y1, q.x2, q.y2, "rgba(239,231,214,0.85)", 6 / z);
         ctx.setLineDash(danger ? [] : [10 / z, 7 / z]);
-        line(q.x1, q.y1, q.x2, q.y2, danger ? RED : rdy ? "rgba(29,26,23,0.8)" : "rgba(29,26,23,0.35)", (danger ? 3.5 : 2.5) / z);
+        line(q.x1, q.y1, q.x2, q.y2, danger ? RED : rdy ? "rgba(47,93,138,0.9)" : "rgba(47,93,138,0.4)", (danger ? 3.5 : 2.5) / z);
         ctx.setLineDash([]);
       }
       ctx.lineCap = "butt";
-      for (let i = 1; i < Math.min(2, sg.length); i++) { const q = sg[i], c = i === 1 && danger ? RED : INK; ctx.save(); ctx.translate(q.x1, q.y1); ctx.rotate(Math.PI / 4); ctx.strokeStyle = "rgba(239,231,214,0.85)"; ctx.lineWidth = 4 / z; ctx.strokeRect(-4.5 / z, -4.5 / z, 9 / z, 9 / z); ctx.strokeStyle = c; ctx.lineWidth = 1.8 / z; ctx.strokeRect(-4.5 / z, -4.5 / z, 9 / z, 9 / z); ctx.restore(); } // 반사 지점: 작은 마름모
-      if (sg.length === 1) { const c = danger ? RED : INK; circle(sg[0].x2, sg[0].y2, 8 / z, null, "rgba(239,231,214,0.85)", 5 / z); circle(sg[0].x2, sg[0].y2, 8 / z, null, c, 2.2 / z); circle(sg[0].x2, sg[0].y2, 2 / z, c); } // 몸이 멈출 자리: 작은 먹 고리(벽에 닿아 반사가 있으면 마름모가 대신)
+      for (let i = 1; i < Math.min(2, sg.length); i++) { const q = sg[i], c = i === 1 && danger ? RED : ACC; ctx.save(); ctx.translate(q.x1, q.y1); ctx.rotate(Math.PI / 4); ctx.strokeStyle = "rgba(239,231,214,0.85)"; ctx.lineWidth = 4 / z; ctx.strokeRect(-4.5 / z, -4.5 / z, 9 / z, 9 / z); ctx.strokeStyle = c; ctx.lineWidth = 1.8 / z; ctx.strokeRect(-4.5 / z, -4.5 / z, 9 / z, 9 / z); ctx.restore(); } // 반사 지점: 작은 마름모
+      if (sg.length === 1) { const c = danger ? RED : ACC; circle(sg[0].x2, sg[0].y2, 8 / z, null, "rgba(239,231,214,0.85)", 5 / z); circle(sg[0].x2, sg[0].y2, 8 / z, null, c, 2.2 / z); circle(sg[0].x2, sg[0].y2, 2 / z, c); } // 몸이 멈출 자리: 작은 먹 고리(벽에 닿아 반사가 있으면 마름모가 대신)
       const g0 = sg[0], wB = Arena.widthOf(s.lv);
       if (rdy) for (const e of pl.cut) { const own = segD(g0.x1, g0.y1, g0.x2, g0.y2, e.x, e.y) <= e.r + wB; circle(e.x, e.y, e.r * (e.type === "banner" ? vk : 1) + 6 / z, null, own ? ACC : "rgba(47,93,138,0.35)", (own ? 3 : 1.5) / z); } // 검기에 걸릴 적은 옅게
       for (const q of pl.red) circle(q.x, q.y, q.r * vk * 1.3 + 6 / z, null, RED, 4 / z);
@@ -711,7 +712,8 @@
 
     // 커서: 시스템 커서 대신 크게 그린다
     if (s.state === "play") {
-      const cx = mouse.x, cy = mouse.y, col = aimDanger ? RED : INK;
+      // 2026-11-10 사용자 지적("마우스 색이 좀 달라야 하나") → 먹색은 적과 같아 묻힘. 내 것=파랑(원판 고리와 같은 ACC), 빨강 조준만 RED.
+      const cx = mouse.x, cy = mouse.y, col = aimDanger ? RED : ACC;
       circle(cx, cy, 13, null, "rgba(239,231,214,0.9)", 6);
       circle(cx, cy, 13, null, col, 2.5);
       for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { line(cx + ax * 7, cy + ay * 7, cx + ax * 19, cy + ay * 19, "rgba(239,231,214,0.9)", 5); line(cx + ax * 7, cy + ay * 7, cx + ax * 19, cy + ay * 19, col, 2.5); }
