@@ -335,7 +335,7 @@
       else if (ev.type === "level") {
         // 2026-11-09 정보량 정리: 화면 가운데 큰 LV 글자와 흰 번쩍임을 없앴다. 왼쪽 아래 HUD 의 LV 줄이 잠깐 밝아지고 짧은 소리만. 새 능력(BOUNCE, LV3 한 번)은 도장 유지
         if (ev.perk ? play(["perk"], 0.85, 1) : play(["levelup"], 0.5, 1 + Math.min(ev.lv, 8) * 0.015)) {} /* 새 능력이면 도장 소리가 레벨업 소리를 대신한다 */ else { tone(523, 0.1, "triangle", 0.06); setTimeout(() => tone(784, 0.16, "triangle", 0.06), 60); }
-        if (ev.perk) { perkPop = { name: ev.perk.name, n: ev.perk.n, lv: ev.lv, born: now }; flash = 0.12; }
+        if (ev.perk) { perkPop = { name: ev.perk.name, n: ev.perk.n, lv: ev.lv, born: now }; }
         lvAt = now;
       } else if (ev.type === "bufferCancel") { // 예약해 둔 일섬이 붉은 것 때문에 취소됨
         pops.push({ str: "CANCEL", x: s.p.x, y: s.p.y - 26, born: now, col: RED, size: 13 }); play(["tick"], 0.35);
@@ -636,8 +636,8 @@
       if (w > 0) { ctx.globalAlpha = 0.35 + 0.65 * w; text("×" + mult.toFixed(1), p.x, p.y - 24 * vk, 18 / z, ACC); ctx.globalAlpha = 1; }
     }
     pops = pops.filter((q) => now - q.born < 700);
-    for (const q of pops) { // 화면 가장자리에서 글자가 잘리지 않게 보이는 범위 안으로 당긴다
-      const sz = (q.size || 16) / z, hw = sz * 0.3 * q.str.length + 8 / z, vx0 = W / 2 - W / 2 / z + hw, vx1 = W / 2 + W / 2 / z - hw, vy0 = H / 2 - H / 2 / z + sz, vy1 = H / 2 + H / 2 / z - 8 / z;
+    for (const q of pops) { // 2026-11-10: 위 100px HUD 띠(점수·BEST·페이스·보스 막대) 아래로만 — 왼쪽 위 글자와 겹쳤다. 화면 가장자리에서 글자가 잘리지 않게 보이는 범위 안으로 당긴다
+      const sz = (q.size || 16) / z, hw = sz * 0.3 * q.str.length + 8 / z, vx0 = W / 2 - W / 2 / z + hw, vx1 = W / 2 + W / 2 / z - hw, vy0 = Math.max(H / 2 - H / 2 / z + sz, 100 + sz * 0.8), vy1 = H / 2 + H / 2 / z - 8 / z;
       text(q.str, Math.max(vx0, Math.min(vx1, q.x)), Math.max(vy0, Math.min(vy1, q.y - (now - q.born) / 20 / z)), sz, q.col);
     }
     ctx.restore();
@@ -688,9 +688,10 @@
     }
     if (pacePop && s.state === "play" && now - pacePop.born < PACE_POP_MS) { // 5·10·15초: 화면 가운데 옅게 크게(마지막 3초 카운트다운과 같은 방식). 빨강은 쓰지 않는다
       const q = (now - pacePop.born) / PACE_POP_MS, inK = Math.min(1, (now - pacePop.born) / 90), up = pacePop.d >= 0;
-      ctx.globalAlpha = (up ? 0.42 : 0.2) * inK * (q < 0.55 ? 1 : 1 - (q - 0.55) / 0.45);
-      text((up ? "+" : "−") + fmt(Math.abs(pacePop.d)), W / 2, H / 2 + 40, 120 * (1.12 - 0.12 * inK), up ? GOLD : INK);
-      text(pacePop.at + "s  " + pacePop.label, W / 2, H / 2 + 76, 20, up ? GOLD : INK);
+      ctx.globalAlpha = (up ? 0.9 : 0.55) * inK * (q < 0.55 ? 1 : 1 - (q - 0.55) / 0.45);
+      // 2026-11-10: 가운데 120px 글자가 판을 덮었다 → 위쪽 가운데(보스 막대 밑) 34px
+      text((up ? "+" : "−") + fmt(Math.abs(pacePop.d)), W / 2, 84, 34 * (1.12 - 0.12 * inK), up ? GOLD : INK);
+      text(pacePop.at + "s  " + pacePop.label, W / 2, 102, 13, up ? GOLD : INK);
       ctx.globalAlpha = 1;
     }
     text(left.toFixed(1), W - 26, 44, 18, INK, "right");
@@ -700,13 +701,10 @@
     ctx.fillStyle = tr >= 3 ? GOLD : ACC; ctx.fillRect(20, H - 14, (W - 40) * k, 5);
     const lq = lvAt ? Math.max(0, 1 - (now - lvAt) / 600) : 0; // 레벨업: HUD 의 LV 줄만 잠깐 커지고 물든다(화면 가운데 큰 글자 대신, 2026-11-09)
     text("LV " + s.lv, 26, H - 22, 16 + lq * 4, lq > 0 ? (tr >= 3 ? GOLD : ACC) : INK, "left");
-    if (perkPop && now - perkPop.born < 900) { // 새 능력 알림: 먹 도장이 찍히듯 커졌다 줄며 앉고, 반투명이라 아래 싸움이 비친다
-      const el = now - perkPop.born, inK = Math.min(1, el / 110), q = el / 900, al = 0.62 * inK * (q < 0.6 ? 1 : 1 - (q - 0.6) / 0.4), sc = 1.35 - 0.35 * inK;
-      ctx.save(); ctx.globalAlpha = al; ctx.translate(W / 2, H / 2 - 70); ctx.rotate(-0.05); ctx.scale(sc, sc);
-      ctx.fillStyle = tier(perkPop.lv) >= 3 ? "#7a5a0c" : INK; ctx.fillRect(-170, -48, 340, 96);
-      ctx.strokeStyle = PAPER; ctx.lineWidth = 2; ctx.strokeRect(-163, -41, 326, 82);
-      text(perkPop.name + (perkPop.n > 1 ? " ×" + perkPop.n : ""), 0, 12, 48, PAPER); text("hit a wall to bounce", 0, 34, 15, PAPER); // 2026-11-09: 반사는 LV3 한 번, SHORT 이동은 벽에 닿을 때만 반사
-      ctx.restore();
+    if (perkPop && now - perkPop.born < 1600) { // 새 능력 알림(2026-11-10): 가운데 큰 도장 카드가 판을 가렸다 → LV 줄 옆에 작게, 금색으로 잠깐
+      const el = now - perkPop.born, al = el < 1100 ? 1 : 1 - (el - 1100) / 500;
+      ctx.font = (16 + lq * 4) + "px serif"; const lx = 26 + ctx.measureText("LV " + s.lv).width + 12;
+      ctx.globalAlpha = al; text(perkPop.name + (perkPop.n > 1 ? " ×" + perkPop.n : "") + "  · cuts bounce off walls", lx, H - 22, 15, GOLD, "left"); ctx.globalAlpha = 1;
     }
     if (!s.started) { const a = 0.5 + 0.5 * Math.sin(now / 250); text("click", p.x, p.y + 44, 16, `rgba(29,26,23,${a})`); }
 
