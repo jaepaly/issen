@@ -7,7 +7,7 @@
 
 ## 영어 본문 (붙여 넣을 부분)
 
-<!-- 아래 영문 문구는 전부 AI 초안이다(2026-11-09 갱신). 사용자가 고르고 고친 뒤 올린다. -->
+<!-- 아래 영문 문구는 전부 AI 초안이다(2026-11-10 v2 규칙으로 갱신). 사용자가 고르고 고친 뒤 올린다. -->
 
 **ISSEN**
 
@@ -19,33 +19,32 @@
 **Photosensitivity warning: full-screen white flashes.**
 <!-- 확정 문구는 사용자 몫. 최종 섬광 세기를 보고 정한다. 게임 안에도 경고 한 줄이 있다 -->
 
-You have 20 seconds. Every click is a single draw-cut (*issen*): you dash in a straight line and stop a little past your cursor, slicing everything on the way. Click past a wall and you stop at the wall.
+You have 20 seconds. Every click is a single draw-cut (*issen*): you flash in a straight line toward your cursor and stop a little past it, slicing everything on the way. Click past a wall and you stop at the wall.
 
 **How to play**
-- Aim with the mouse. Click to cut. There is no cooldown.
+- Aim with the mouse. Click to cut. There is no cooldown — your hand sets the pace.
 - Touch a red soldier with your blade and the run ends. Instantly.
-- Line them up. One cut through many is worth far more than many cuts through one.
-- Keep cutting: hit again within 0.8 s to grow your chain. A cut that hits nothing breaks it.
+- Keep cutting: land another cut within 0.8 s to grow your chain (up to ×6). A cut that hits nothing breaks it.
+- Cut down soldiers and more pour in. The faster you cut, the more there are to cut.
 
 **Score**
-`cut² × chain bonus (up to ×6)` — the number of enemies in one cut, squared, times your chain bonus.
-<!-- 최대 배율 ×6은 코드 워커 변경 반영 기준. 최종 빌드와 다르면 고친다 -->
+Every enemy you cut is worth 10 × your chain multiplier. Armored soldiers are worth extra.
+At 12 seconds the general arrives. Cut the general down for 4 seconds of FRENZY: every point doubled.
 
 **Growing stronger**
-- Level up and you get faster, and the battlefield zooms out.
-- From LV3, your cut throws a sword wave that bounces off the wall.
-- Kill the general to draw once more and cut down everything on screen.
+- Level up and your blade gets faster and wider.
+- From LV3, your cut bounces off the wall once.
 
 **Features**
 - Your best score, and live pace against it at 5, 10 and 15 seconds.
 - DAILY: same day, same battlefield for everyone. Press T for a RANDOM run.
+- Press V on the title or result screen to switch the cut between INSTANT and DASH.
 - R or Space to restart instantly. C copies your result line with the game link.
 
-<!-- 테마 연결: 선택 사항. 넣을지는 사용자가 정한다. 다른 테마는 쓰지 않는다 -->
-*Theme — Double or Quits:* one more enemy in the line squares your score — but one red in the line ends it all.
+<!-- 2026-11-10: 테마(Double or Quits) 한 줄은 뺐다. v2에서 점수가 cut²(한 줄 더 베면 제곱)가 아니라 처치 수 × 연쇄라서 문장이 더 이상 맞지 않는다. 넣으려면 새 문장이 필요 — 사용자 결정 -->
 
 **Controls**
-Mouse only. A mouse or trackpad with hover is required (no touch). R / Space: restart. T: RANDOM. C: copy result.
+Mouse only. A mouse or trackpad with hover is required (no touch). R / Space: restart. T: DAILY / RANDOM. V: INSTANT / DASH. C: copy result.
 
 **Content note**
 Stylized ink-splatter violence. Screen flashes and screen shake on big cuts.
@@ -103,7 +102,7 @@ Made for the 20 Second Game Jam 2026. Play time is 20 seconds or less.
 ### 사용자가 정할 것
 - 첫 줄 소개(초안: "20-second ink-wash sword slasher. Cut fast. Never cut red."). 제목 ISSEN은 결정됨.
 - 크레딧에 쓸 이름. 코드 도구 이름을 어디까지 적을지(Claude/Codex).
-- 점수 줄 표기(`cut² × chain bonus (up to ×6)`)가 최종 빌드와 맞는지.
-- 테마(Double or Quits) 한 줄을 넣을지.
+- 점수 설명이 최종 빌드와 맞는지(2026-11-10 v2 기준으로 고침: 10 × 연쇄 배율, 장군 처치 시 4초 광란 ×2).
+- 테마 한 줄: v2에서 옛 문장(cut²)이 맞지 않아 뺐다. 넣을지, 넣는다면 어떤 문장일지.
 - 깜빡임 경고 확정 문구, 크레딧의 사람·AI 역할 문장.
 - 자동 시작 여부, 성인 콘텐츠 표시 여부.
